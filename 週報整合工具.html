@@ -347,6 +347,19 @@ label.check input{width:auto}
 .detail .analysis{background:#11202c;border:1px solid #1a3a4a;border-radius:8px;padding:10px;font-size:13px;line-height:1.6}
 .detail .imgs{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 .detail .imgs img{width:120px;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--line);cursor:pointer}
+/* editable task fields + image management */
+.task-edit{width:100%;background:#0f1722;color:var(--text);border:1px solid var(--line);
+  border-radius:8px;padding:8px 10px;font-size:13px;line-height:1.55;font-family:inherit;resize:vertical}
+.task-edit:focus{outline:none;border-color:var(--accent)}
+.detail .imgs.editable{align-items:center}
+.img-edit{position:relative;display:inline-flex;line-height:0}
+.img-edit img{width:120px;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--line);cursor:pointer}
+.img-del{position:absolute;top:-7px;right:-7px;width:22px;height:22px;border-radius:50%;border:none;
+  background:var(--danger);color:#fff;font-size:12px;line-height:1;cursor:pointer;box-shadow:0 1px 6px rgba(0,0,0,.5)}
+.img-del:hover{filter:brightness(1.15)}
+.img-add{display:inline-flex;align-items:center;justify-content:center;gap:4px;width:120px;height:90px;
+  border:1.5px dashed var(--line);border-radius:8px;color:var(--muted);font-size:13px;cursor:pointer;background:#0f1722}
+.img-add:hover{border-color:var(--accent);color:var(--accent)}
 
 /* lightbox */
 .lightbox{position:fixed;inset:0;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;z-index:80;cursor:zoom-out}
@@ -1665,8 +1678,24 @@ function editTaskField(id, field, val){
   else if(field==='project'){ t.project=val; t.projk=projKeyOf(val); t.projectLabel=projLabelOf(val); }
   else t[field]=val;
   if(field==='progress'||field==='risk'||field==='complexity') t.manualEdit=true;  // survive re-import
+  if(field==='current'||field==='next'||field==='analysis') t.manualText=true;      // keep user edits
   persist(); renderStats(); renderCatalog(); renderMembersArea();
-  if(!$('#taskModal').hidden && _openTaskId===id && field!=='project') openTask(id);  // refresh Closed/Status live
+  // don't re-render the modal for free-text edits (would steal focus mid-typing)
+  if(!$('#taskModal').hidden && _openTaskId===id && !['project','current','next','analysis'].includes(field)) openTask(id);
+}
+function removeTaskImage(tid, imgId){
+  const t=tasks.find(x=>x.id===tid); if(!t||!t.images) return;
+  t.images=t.images.filter(im=>im.id!==imgId);
+  persist(); renderMembersArea(); if(_openTaskId===tid && !$('#taskModal').hidden) openTask(tid);
+  toast('已移除圖片');
+}
+async function addTaskImages(tid, fileList){
+  const t=tasks.find(x=>x.id===tid); if(!t) return;
+  const files=Array.from(fileList||[]).filter(f=>/^image\//.test(f.type)); if(!files.length) return;
+  t.images=t.images||[];
+  for(const f of files){ const url=await fileToDataURL(f); const s=await shrinkImage(url); t.images.push({id:uid(), data:s.data, w:s.w, h:s.h}); }
+  persist(); renderMembersArea(); if(_openTaskId===tid && !$('#taskModal').hidden) openTask(tid);
+  toast('已新增 '+files.length+' 張圖片');
 }
 function addTaskOwner(id, mid){
   const t=tasks.find(x=>x.id===id); if(!t||!mid) return;
@@ -1830,15 +1859,19 @@ function openTask(id){
         ${t.unmatched&&t.unmatched.length?`<span class="k">未對應</span><span style="color:var(--warn)">${esc(t.unmatched.join(', '))}</span>`:''}
         <span class="k">來源</span><span>${esc(t.source||'手動')}</span>
       </div>
-      <div class="section-title">This week</div>
-      <div>${esc(rewriteProfessional(t.current))||'—'}</div>
-      <div class="section-title">Next week</div>
-      <div>${esc(rewriteProfessional(t.next))||'—'}</div>
+      <div class="section-title">This week（可編輯）</div>
+      <textarea class="task-edit" data-edit="current" data-tid="${t.id}" rows="3" placeholder="本週工作內容">${esc(t.current||'')}</textarea>
+      <div class="section-title">Next week（可編輯）</div>
+      <textarea class="task-edit" data-edit="next" data-tid="${t.id}" rows="2" placeholder="下週計畫">${esc(t.next||'')}</textarea>
       ${t.delta?`<div class="section-title">Weekly delta</div><div style="color:var(--warn)">${esc(t.delta)}</div>`:''}
       ${t.prev?`<div class="section-title">前次描述</div><div class="hint">${esc(t.prev.current||'—')} (was ${t.prev.progress}%, risk ${t.prev.risk})</div>`:''}
-      <div class="section-title">Issue analysis</div>
-      <div class="analysis">${esc(t.analysis||generateAnalysis(t))}</div>
-      ${imgs?`<div class="section-title">圖片 Attachments</div><div class="imgs">${imgs}</div>`:''}
+      <div class="section-title">Issue analysis（可編輯）</div>
+      <textarea class="task-edit analysis-edit" data-edit="analysis" data-tid="${t.id}" rows="3" placeholder="問題分析">${esc(t.analysis||generateAnalysis(t))}</textarea>
+      <div class="section-title">圖片 Attachments（可刪除／新增，匯出報告會跟著更新）</div>
+      <div class="imgs editable">
+        ${(t.images||[]).map(im=>`<span class="img-edit"><img src="${im.data}" data-light="${im.id}"><button class="img-del" data-delimg="${t.id}|${im.id}" title="刪除這張圖">✕</button></span>`).join('')}
+        <label class="img-add" title="新增 / 更換圖片">＋ 圖片<input type="file" accept="image/*" multiple hidden data-addimg="${t.id}"></label>
+      </div>
     </div>
     <div class="modal-foot">
       <button class="btn danger" data-del-task="${t.id}">刪除任務</button>
@@ -2553,6 +2586,7 @@ function wireEvents(){
     if(t.dataset.delTask){ deleteTask(t.dataset.delTask); $('#taskModal').hidden=true; return; }
     if(t.dataset.rmWb!==undefined){ wbImages.splice(+t.dataset.rmWb,1); renderWbThumbs(); return; }
     if(t.dataset.phrase){ const ta=$('#wbThisWeek'); ta.value=(ta.value?ta.value+' ':'')+PHRASES[t.dataset.phrase]; return; }
+    if(t.dataset.delimg){ const [tid,imgId]=t.dataset.delimg.split('|'); removeTaskImage(tid,imgId); return; }
     if(t.dataset.light){ openLight(t.getAttribute('src')); return; }
     if(t.dataset.exportMember!==undefined){ if(t.dataset.exportMember) exportWord([t.dataset.exportMember]); else toast('此任務沒有對應成員'); return; }
     // ----- catalog editing -----
@@ -2578,6 +2612,7 @@ function wireEvents(){
     if(el.dataset.setrole!==undefined){ setMemberRole(el.dataset.setrole, el.value); return; }
     if(el.dataset.setrole2!==undefined){ setMemberRole2(el.dataset.setrole2, el.value); return; }
     if(el.dataset.setcname!==undefined){ setMemberCname(el.dataset.setcname, el.value); return; }
+    if(el.dataset.addimg!==undefined){ addTaskImages(el.dataset.addimg, el.files); el.value=''; return; }
     if(el.dataset.edit && el.dataset.tid){ editTaskField(el.dataset.tid, el.dataset.edit, el.value); return; }
     if(el.dataset.addowner){ addTaskOwner(el.dataset.addowner, el.value); el.value=''; return; }
   });
@@ -2643,7 +2678,7 @@ function renderNarrative(){
 window.WRT={ get members(){return members;}, get tasks(){return tasks;}, get batches(){return batches;},
   parsePPTX, importFiles, addMembers, parseMemberText, overlayTasks, exportWord, buildPptx, assemblePptx, resolveOwners, matchOwner,
   autoAddFromReport, reresolveAllTasks, buildNarrative, projKeyOf, applyProjAliases, openProject, openNarrative,
-  projectGroups, editTaskField, addTaskOwner, removeTaskOwner, ensureTesseract, ocrImages, ocrReportToTasks, ocrTask, setMemberRole, setMemberRole2,
+  projectGroups, editTaskField, addTaskOwner, removeTaskOwner, removeTaskImage, addTaskImages, openTask, ensureTesseract, ocrImages, ocrReportToTasks, ocrTask, setMemberRole, setMemberRole2,
   navStat, mergeProjects, resolveProjk, ocrAllReports, dedupeTasks, cleanupGarbledMembers, snapName, get pendingReports(){return pendingReports;}, convertOcrRows,
   switchGroup, addGroup, renameGroup, deleteGroup, get memberGroups(){return memberGroups;}, get activeGroup(){return activeGroup;},
   get deletedNames(){return deletedNames;}, get projMerge(){return projMerge;}, get projMeta(){return projMeta;},
