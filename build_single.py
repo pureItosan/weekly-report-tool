@@ -7,6 +7,9 @@ def read(p):
     with open(os.path.join(base,p),encoding='utf-8') as f: return f.read()
 
 html=read('index.html')
+# strip cache-busting query strings (?v=...) so the inliner below matches the tags and the
+# bundle ends up fully self-contained (no external refs remain)
+html=re.sub(r'(href="styles\.css|src="app\.js)\?v=[^"]*"', r'\1"', html)
 css=read('styles.css')
 jszip=read('vendor/jszip.min.js')
 xlsx=read('vendor/xlsx.full.min.js')
