@@ -88,7 +88,7 @@ function persistLocal(){
       : tasks;
     store.save(LS.tasks, toSave);
   }catch(e){ console.warn('tasks persist failed', e);
-    toast('⚠ 任務太多（多為圖片）超過瀏覽器儲存上限，名單已保留，任務本次未存。'); }
+    toast('⚠ Too many tasks(mostly images)exceeded the browser storage limit; members kept, tasks not saved this time.'); }
 }
 
 /* downscale an image dataURL to a JPEG. 1600px keeps schematics / measurement tables
@@ -167,12 +167,12 @@ function parseMemberText(text){
     if(cm){ cname=cm[0].trim(); line=line.replace(cm[0],' ').replace(/\s+/g,' ').trim(); }
     // CSV style "name,alias,alias" OR "name: alias, alias"
     let name, aliasStr='';
-    if(/[:：]/.test(line)){ const p=line.split(/[:：]/); name=p[0].trim(); aliasStr=p.slice(1).join(':'); }
+    if(/[::]/.test(line)){ const p=line.split(/[::]/); name=p[0].trim(); aliasStr=p.slice(1).join(':'); }
     else if(line.includes(',')){ const p=line.split(','); name=p[0].trim(); aliasStr=p.slice(1).join(','); }
     else name=line;
     if(!name && cname){ name=cname; cname=''; }   // a Chinese-only line -> that IS the name
     if(!name) return;
-    const aliases=aliasStr.split(/[,，、/]/).map(s=>s.trim()).filter(Boolean);
+    const aliases=aliasStr.split(/[,, , /]/).map(s=>s.trim()).filter(Boolean);
     out.push({name, aliases, role, cname});
   });
   return out;
@@ -228,16 +228,16 @@ function autoAddFromReport(){
   if(toAdd.length) addMembers(toAdd.map(n=>({name:n, aliases:[]})));  // addMembers re-resolves + renders
   return toAdd;
 }
-function clearMembers(){ if(confirm('確定清空整份成員名單？(任務不會被刪除)')){ members=[]; deletedNames=[]; persist(); renderAll(); } }
+function clearMembers(){ if(confirm('Clear the entire member list?(tasks are not deleted)')){ members=[]; deletedNames=[]; persist(); renderAll(); } }
 
 /* =====================================================================
    NAME MATCHING  (owner-priority, multi-owner, fuzzy)
    ===================================================================== */
 function splitOwners(raw){
   if(!raw) return [];
-  // drop parentheticals like "Jin(SW:Jonas)" -> "Jin"; split on / , & newline 、 + and whitespace
+  // drop parentheticals like "Jin(SW:Jonas)" -> "Jin"; split on / , & newline ,  + and whitespace
   return String(raw).replace(/\([^)]*\)/g,' ')
-    .split(/[\/,&\n、+]|\band\b|\s+/i).map(s=>s.trim()).filter(s=>s.length>=2);
+    .split(/[\/,&\n, +]|\band\b|\s+/i).map(s=>s.trim()).filter(s=>s.length>=2);
 }
 function sharedPrefix(a,b){ let i=0; while(i<a.length&&i<b.length&&a[i]===b[i]) i++; return i; }
 function lev(a,b){
@@ -323,23 +323,23 @@ async function importFiles(fileList){
       else if(ext==='docx') parsed=await parseDOCX(f);
       else if(ext==='xlsx') parsed=await parseXLSX(f);
       else if(ext==='csv'||ext==='txt') parsed=await parseTextTable(await f.text());
-      else { toast('不支援的格式: '+ext); continue; }
-    }catch(err){ console.error(err); toast('解析失敗: '+f.name+' — '+err.message); continue; }
-    if(!parsed.length){ toast('在 '+f.name+' 找不到可解析的任務'); continue; }
+      else { toast('Unsupported format: '+ext); continue; }
+    }catch(err){ console.error(err); toast('Parse failed: '+f.name+' — '+err.message); continue; }
+    if(!parsed.length){ toast('No parsable tasks in '+f.name); continue; }
     // image-pasted report placeholders stay IN MEMORY (not persisted -> no localStorage bloat)
     const reports=parsed.filter(t=>t._imageReport);
     pendingReports.push(...reports);
     overlayTasks(parsed.filter(t=>!t._imageReport), f.name);
   }
-  if(autoAdd){ const added=autoAddFromReport(); if(added.length) toast('已從報告自動加入 '+added.length+' 位成員'); }
+  if(autoAdd){ const added=autoAddFromReport(); if(added.length) toast('Auto-added '+added.length+' members from reports'); }
   dedupeTasks(); cleanupGarbledMembers();
   renderAll();
   if(pendingReports.length){
     if(navigator.onLine){
-      toast(`偵測到 ${pendingReports.length} 張圖片頁，背景 OCR 辨識中…`);
+      toast(`Detected ${pendingReports.length} image pages — OCR running in the background…`);
       setTimeout(()=>ocrAllReports(true), 400);          // auto-run in background
     } else {
-      toast(`偵測到 ${pendingReports.length} 張圖片頁，連網後按「🔍 OCR 圖片報告」即可辨識`);
+      toast(`Detected ${pendingReports.length} image pages — go online and click "🔍 OCR image reports" to recognise`);
     }
   }
 }
@@ -366,7 +366,7 @@ const RISK_ORDER={High:3,Medium:2,Low:1,'':0};
 function maxByRisk(arr){ return arr.filter(Boolean).sort((a,b)=>RISK_ORDER[b]-RISK_ORDER[a])[0]||''; }
 function uniqJoin(arr, sep){ return [...new Set(arr.map(x=>(x||'').trim()).filter(Boolean))].join(sep); }
 
-const CODE_RE=/B\d{2}[A-Z]\d{3}[A-Z]?\d{0,2}|SDX[-\s]?\d{2}(?:[\/\s、,-]\d{2})?|VB\d{3}/i;
+const CODE_RE=/B\d{2}[A-Z]\d{3}[A-Z]?\d{0,2}|SDX[-\s]?\d{2}(?:[\/\s, ,-]\d{2})?|VB\d{3}/i;
 const ID_RE=/\bID\s?\d{2,4}\b/i;
 function codeKey(code){
   if(/sdx/i.test(code)){ const nums=(code.match(/\d{2}/g)||[]).map(Number).sort((a,b)=>a-b); return 'c:sdx'+nums.join(''); } // SDX82/85 == SDX85/82
@@ -444,7 +444,7 @@ async function parsePPTX(file){
     const allText=localTags(doc,'t').map(t=>t.textContent.replace(/\s+/g,' '));
     const joinedText=allText.join(' ');
     let slideReporter='';
-    const rm=joinedText.match(/reporter\s*[:：]\s*([A-Za-z][\w.]*(?:\s*[\/&,]\s*[A-Za-z][\w.]*)*)/i);
+    const rm=joinedText.match(/reporter\s*[::]\s*([A-Za-z][\w.]*(?:\s*[\/&,]\s*[A-Za-z][\w.]*)*)/i);
     if(rm) slideReporter=rm[1].trim();
     // closing / divider slide (Thank You, 感謝聆聽, The End…) — its decorative image must NOT
     // be attached to the last member's section.
@@ -480,7 +480,7 @@ async function parsePPTX(file){
     // ---- fallback: "Field: value" text blocks if no tables ----
     if(!rowObjs.length){
       const f={};
-      allText.forEach(line=>{ const m=line.match(/^([A-Za-z ]{3,40})[:：]\s*(.+)$/); if(m){ const k=canonField(m[1]); if(k) f[k]=m[2].trim(); } });
+      allText.forEach(line=>{ const m=line.match(/^([A-Za-z ]{3,40})[::]\s*(.+)$/); if(m){ const k=canonField(m[1]); if(k) f[k]=m[2].trim(); } });
       if(f.project||f.current||f.owner) rowObjs.push(f);
     }
 
@@ -528,7 +528,7 @@ async function parsePPTX(file){
         const hi=[];
         // keep a HIGH-res copy for OCR (in-memory only, never persisted) — sharper source = far fewer garbles.
         for(let k=0;k<images.length;k++){ const s=await shrinkImage(origs[k]||images[k].data, 2600, 0.92); hi.push({id:uid(), data:s.data, w:s.w, h:s.h}); }
-        const ph=makeTaskFromFields({project:'圖片式報告', current:'image report slide '+slideNo}, slideNo);
+        const ph=makeTaskFromFields({project:'Image report', current:'image report slide '+slideNo}, slideNo);
         ph._images=hi; ph._imageReport=true;
         ph._afterReporter = (lastTaskSlide>=0 && out[lastSectionStart] && out[lastSectionStart].reporter) || '';
         out.push(ph);
@@ -626,7 +626,7 @@ async function parseDOCX(file){
   const out=[];
   blocks.forEach(b=>{
     const f={};
-    b.forEach(line=>{ const m=line.match(/^([A-Za-z ]{3,40})[:：]\s*(.+)$/); if(m){const k=canonField(m[1]); if(k)f[k]=m[2].trim();} });
+    b.forEach(line=>{ const m=line.match(/^([A-Za-z ]{3,40})[::]\s*(.+)$/); if(m){const k=canonField(m[1]); if(k)f[k]=m[2].trim();} });
     if(f.project||f.current||f.owner) out.push(makeTaskFromFields(f,0));
   });
   return out;
@@ -660,7 +660,7 @@ async function parseTextTable(text){
   const blocks=[]; let cur=[];
   lines.concat(['']).forEach(line=>{ if(!line.trim()){ if(cur.length){blocks.push(cur);cur=[];} } else cur.push(line); });
   const out=[];
-  blocks.forEach(b=>{ const f={}; b.forEach(line=>{ const m=line.match(/^([A-Za-z ]{3,40})[:：]\s*(.+)$/); if(m){const k=canonField(m[1]); if(k)f[k]=m[2].trim();} }); if(f.project||f.current||f.owner) out.push(makeTaskFromFields(f,0)); });
+  blocks.forEach(b=>{ const f={}; b.forEach(line=>{ const m=line.match(/^([A-Za-z ]{3,40})[::]\s*(.+)$/); if(m){const k=canonField(m[1]); if(k)f[k]=m[2].trim();} }); if(f.project||f.current||f.owner) out.push(makeTaskFromFields(f,0)); });
   return out;
 }
 function splitCsv(line){ const out=[]; let cur='',q=false; for(const ch of line){ if(ch==='"'){q=!q;} else if(ch===','&&!q){out.push(cur);cur='';} else cur+=ch; } out.push(cur); return out.map(s=>s.trim().replace(/^"|"$/g,'')); }
@@ -715,7 +715,7 @@ function overlayTasks(parsed, sourceName){
   batches.unshift({name:sourceName,date:new Date().toISOString().slice(0,16).replace('T',' '),
     nnew:nNew,nupd:nUpd,nunc:nUnc});
   persist();
-  toast(`匯入 ${sourceName}：New ${nNew} · Updated ${nUpd} · Unchanged ${nUnc}`);
+  toast(`Imported ${sourceName}:New ${nNew} · Updated ${nUpd} · Unchanged ${nUnc}`);
   return touched;
 }
 // remove near-duplicate tasks under the same person (e.g. same item OCR'd twice with different garbling)
@@ -768,29 +768,29 @@ function cleanupGarbledMembers(){
 }
 function computeDelta(oldT,newT){
   const d=[];
-  if(oldT.progress!==newT.progress) d.push(`進度 ${oldT.progress}% → ${newT.progress}%`);
-  if(oldT.risk!==newT.risk) d.push(`風險 ${oldT.risk} → ${newT.risk}`);
-  if(oldT.due!==newT.due && newT.due) d.push(`期限 ${oldT.due||'—'} → ${newT.due}`);
-  if(norm(oldT.current)!==norm(newT.current)) d.push('工作描述已更新');
-  if(norm(oldT.next)!==norm(newT.next)) d.push('下週計畫已更新');
+  if(oldT.progress!==newT.progress) d.push(`Progress ${oldT.progress}% → ${newT.progress}%`);
+  if(oldT.risk!==newT.risk) d.push(`Risk ${oldT.risk} → ${newT.risk}`);
+  if(oldT.due!==newT.due && newT.due) d.push(`Due ${oldT.due||'—'} → ${newT.due}`);
+  if(norm(oldT.current)!==norm(newT.current)) d.push('Work description updated');
+  if(norm(oldT.next)!==norm(newT.next)) d.push('Next week plan updated');
   return d.join('；');
 }
 function deleteTask(id){
   const t=tasks.find(x=>x.id===id); if(!t) return false;
-  if(!confirm('刪除此任務？\n'+((t.current||t.next||'(無描述)').slice(0,60))+'\n刪除後無法復原。')) return false;
+  if(!confirm('Delete this task?\n'+((t.current||t.next||'(no description)').slice(0,60))+'\nThis cannot be undone.')) return false;
   (t.images||[]).forEach(im=>cloudDeleteImage(im.id));        // sync-remove its cloud images too
-  tasks=tasks.filter(x=>x.id!==id); persist(); renderAll(); toast('已刪除任務'); return true;
+  tasks=tasks.filter(x=>x.id!==id); persist(); renderAll(); toast('Task deleted'); return true;
 }
-function resetTasks(){ if(confirm('清空所有任務？(成員名單會保留)')){ tasks=[]; batches=[]; persist(); renderAll(); } }
-// 一鍵清除內容：清掉所有任務、批次與圖片（雲端圖片也一併刪除），成員名單保留。雙重確認避免誤按。
+function resetTasks(){ if(confirm('Clear all tasks? (members are kept)')){ tasks=[]; batches=[]; persist(); renderAll(); } }
+// 一鍵清除內容:清掉所有任務, 批次與圖片(雲端圖片也一併刪除), 成員名單保留.雙重確認避免誤按.
 function clearAllContent(){
-  if(!tasks.length && !batches.length){ toast('目前沒有內容可清除'); return; }
-  if(!confirm('一鍵清除內容：將刪除所有任務與圖片（成員名單會保留）。\n此動作無法復原，確定要清除嗎？')) return;
-  if(!confirm('再次確認：真的要清除全部週報內容嗎？')) return;
+  if(!tasks.length && !batches.length){ toast('Nothing to clear'); return; }
+  if(!confirm('Clear all: this deletes every task and image (members are kept).\nThis cannot be undone. Proceed?')) return;
+  if(!confirm('Confirm again: really clear all report content?')) return;
   tasks.forEach(t=>(t.images||[]).forEach(im=>cloudDeleteImage(im.id)));   // 同步刪除雲端圖片
   tasks=[]; batches=[]; pendingReports=[]; updateOcrBtn();
   persist(); renderAll();
-  toast('已一鍵清除全部內容（成員名單保留）');
+  toast('All content cleared (members kept)');
 }
 
 /* =====================================================================
@@ -925,10 +925,10 @@ function renderFilters(){
   const ps=$('#filterProject'); if(ps){
     const groups=projectGroups();                       // canonical (merged) projects, by clean label
     if(filters.project && !groups.some(g=>g.projk===filters.project)) filters.project='';
-    ps.innerHTML='<option value="">全部專案</option>'+groups.map(g=>`<option value="${esc(g.projk)}" ${filters.project===g.projk?'selected':''}>${esc(g.label)}</option>`).join('');
+    ps.innerHTML='<option value="">All projects</option>'+groups.map(g=>`<option value="${esc(g.projk)}" ${filters.project===g.projk?'selected':''}>${esc(g.label)}</option>`).join('');
   }
   const ms=$('#filterMember'); if(ms){
-    ms.innerHTML='<option value="">全部成員</option>'+members.map(m=>`<option value="${m.id}" ${filters.member===m.id?'selected':''}>${esc(m.name)}</option>`).join('')+
+    ms.innerHTML='<option value="">All members</option>'+members.map(m=>`<option value="${m.id}" ${filters.member===m.id?'selected':''}>${esc(m.name)}</option>`).join('')+
       `<option value="__un__" ${filters.member==='__un__'?'selected':''}>Unassigned</option>`;
   }
   const chk=$('#autoAddChk'); if(chk) chk.checked=autoAdd;
@@ -946,17 +946,17 @@ function renderMembers(){
   $('#memberChips').innerHTML=members.map(m=>`
     <li class="mchip role-${m.role||'none'}" draggable="true" data-mid="${m.id}">
       <div class="mchip-top">
-        <span class="drag-handle" title="拖曳調整順序">⠿</span>
+        <span class="drag-handle" title="Drag to reorder">⠿</span>
         <span class="mname">${esc(m.name)}</span>
-        ${m.cname?`<span class="cname" title="小名 Nickname">${esc(m.cname)}</span>`:''}
+        ${m.cname?`<span class="cname" title="Nickname">${esc(m.cname)}</span>`:''}
         ${roleBadge(m.role)}${roleBadge(m.role2,true)}
         ${m.aliases.length?`<span class="alias">${esc(m.aliases.join(', '))}</span>`:''}
-        <button class="mdel" title="刪除" data-del-member="${m.id}">✕</button>
+        <button class="mdel" title="Delete" data-del-member="${m.id}">✕</button>
       </div>
       <div class="mchip-roles">
-        <label>主<select class="role-mini" data-setrole="${m.id}">${roleOptions(m.role)}</select></label>
-        <label>副<select class="role-mini sub" data-setrole2="${m.id}">${roleOptions(m.role2)}</select></label>
-        <input class="cname-mini" data-setcname="${m.id}" value="${esc(m.cname||'')}" placeholder="小名 Nickname" maxlength="16" title="小名 / Nickname">
+        <label>Main<select class="role-mini" data-setrole="${m.id}">${roleOptions(m.role)}</select></label>
+        <label>Sub<select class="role-mini sub" data-setrole2="${m.id}">${roleOptions(m.role2)}</select></label>
+        <input class="cname-mini" data-setcname="${m.id}" value="${esc(m.cname||'')}" placeholder="Nickname" maxlength="16" title="Nickname">
       </div>
     </li>`).join('');
   wireMemberDrag();
@@ -966,9 +966,9 @@ function renderMembers(){
 function syncActiveGroup(){ const g=memberGroups.find(x=>x.name===activeGroup); if(g) g.members=members.slice(); }
 function renderGroups(){
   const sel=$('#groupSelect'); if(!sel) return;
-  sel.innerHTML=memberGroups.map(g=>`<option value="${esc(g.name)}"${g.name===activeGroup?' selected':''}>${esc(g.name)} · ${(g.members||[]).length}人</option>`).join('');
+  sel.innerHTML=memberGroups.map(g=>`<option value="${esc(g.name)}"${g.name===activeGroup?' selected':''}>${esc(g.name)} · ${(g.members||[]).length} members</option>`).join('');
 }
-function saveGroup(){ syncActiveGroup(); persist(); renderGroups(); toast('已儲存分組：'+activeGroup+'（'+members.length+' 人）'); }
+function saveGroup(){ syncActiveGroup(); persist(); renderGroups(); toast('Group saved: '+activeGroup+' ('+members.length+' members)'); }
 function switchGroup(name){
   if(name===activeGroup || !memberGroups.some(g=>g.name===name)) return;
   syncActiveGroup();                                   // save current roster into its group
@@ -976,41 +976,41 @@ function switchGroup(name){
   const g=memberGroups.find(x=>x.name===name);
   members=(g.members||[]).map(m=>({...m, aliases:(m.aliases||[]).slice()}));
   reresolveAllTasks(); persist(); renderAll();
-  toast('已切換群組：'+name);
+  toast('Switched to group: '+name);
 }
 function addGroup(name, copyCurrent){
   name=String(name||'').trim(); if(!name) return false;
-  if(memberGroups.some(g=>g.name===name)){ toast('已有同名群組'); return false; }
+  if(memberGroups.some(g=>g.name===name)){ toast('A group with that name already exists'); return false; }
   syncActiveGroup();
   memberGroups.push({name, members: copyCurrent? members.slice() : []});
   activeGroup=name; members = copyCurrent? members.slice() : [];
   reresolveAllTasks(); persist(); renderAll(); return true;
 }
 function createGroup(){
-  const name=(prompt('新群組名稱（例如 SPD RD3-2）：','')||'').trim(); if(!name) return;
-  const copy=confirm('要把目前的成員複製到新群組嗎？\n\n確定＝複製目前名單　|　取消＝建立空白名單');
-  if(addGroup(name, copy)) toast('已建立群組：'+name);
+  const name=(prompt('New group name (e.g. SPD RD3-2):','')||'').trim(); if(!name) return;
+  const copy=confirm('Copy current members into the new group?\n\nOK = copy current list  |  Cancel = create an empty list');
+  if(addGroup(name, copy)) toast('Group created: '+name);
 }
 function renameGroup(){
   const g=memberGroups.find(x=>x.name===activeGroup); if(!g) return;
-  const name=(prompt('群組改名：', g.name)||'').trim(); if(!name||name===g.name) return;
-  if(memberGroups.some(x=>x.name===name)){ toast('已有同名群組'); return; }
-  g.name=name; activeGroup=name; persist(); renderGroups(); toast('已改名為：'+name);
+  const name=(prompt('Rename group:', g.name)||'').trim(); if(!name||name===g.name) return;
+  if(memberGroups.some(x=>x.name===name)){ toast('A group with that name already exists'); return; }
+  g.name=name; activeGroup=name; persist(); renderGroups(); toast('Renamed to: '+name);
 }
 function deleteGroup(){
-  if(memberGroups.length<=1){ toast('至少要保留一個群組'); return; }
-  if(!confirm('刪除群組「'+activeGroup+'」？\n（只移除這份成員名單設定，任務資料不受影響）')) return;
+  if(memberGroups.length<=1){ toast('At least one group must remain'); return; }
+  if(!confirm('Delete group "'+activeGroup+'"?\n(removes only this roster setting; task data is unaffected)')) return;
   memberGroups=memberGroups.filter(g=>g.name!==activeGroup);
   activeGroup=memberGroups[0].name;
   members=(memberGroups[0].members||[]).map(m=>({...m, aliases:(m.aliases||[]).slice()}));
-  reresolveAllTasks(); persist(); renderAll(); toast('已刪除群組');
+  reresolveAllTasks(); persist(); renderAll(); toast('Group deleted');
 }
 
 function renderBatches(){
   $('#batchList').innerHTML = batches.length? batches.slice(0,8).map(b=>`
     <li><span>${esc(b.name)}<br><small>${b.date}</small></span>
     <span><b style="color:var(--new)">${b.nnew}N</b> <b style="color:var(--updated)">${b.nupd}U</b> ${b.nunc}=</span></li>`).join('')
-    : '<li>尚無匯入紀錄</li>';
+    : '<li>No imports yet</li>';
 }
 function renderStats(){
   const vt=visibleTasks();
@@ -1023,12 +1023,12 @@ function renderStats(){
   // each stat card doubles as navigation: [icon, value, label, colorClass, view, statusFilter].
   // special view '__docs__' -> opens the global Design Documents library (replaces the old 完成率 box).
   const cards=[
-    ['📁', projCount, '專案 Projects', '', 'catalog', ''],
-    ['👥', members.length, '成員 Members', '', 'members', ''],
-    ['📋', total, '任務 Tasks', '', 'members', ''],
-    ['✅', closed+'/'+total, '已結案 Closed', 'ok', 'members', 'closed'],
+    ['📁', projCount, 'Projects', '', 'catalog', ''],
+    ['👥', members.length, 'Members', '', 'members', ''],
+    ['📋', total, 'Tasks', '', 'members', ''],
+    ['✅', closed+'/'+total, 'Closed', 'ok', 'members', 'closed'],
     ['📐', docCount, 'Design Docs', 'accent', '__docs__', ''],
-    ['⚠️', high, '高風險 High risk', 'warn', 'members', 'highrisk'],
+    ['⚠️', high, 'High risk', 'warn', 'members', 'highrisk'],
   ];
   $('#statsRow').innerHTML=cards.map(([ic,n,l,c,view,flt])=>{
     if(view==='__docs__') return `<div class="stat nav ${c}" data-designdocs="1"><div class="st-ic">${ic}</div><div><div class="num">${n}</div><div class="lbl">${l}</div></div></div>`;
@@ -1064,7 +1064,7 @@ function mergeProjects(fromProjk, toProjk){
   if(!fromProjk||!toProjk||fromProjk===toProjk) return;
   if(resolveProjk(toProjk)===fromProjk) return;          // avoid cycles
   projMerge[fromProjk]=toProjk; persist(); renderCatalog(); renderStats();
-  toast('已把專案併入：'+(projectGroups().find(g=>g.projk===resolveProjk(toProjk))||{}).label);
+  toast('Merged project into: '+(projectGroups().find(g=>g.projk===resolveProjk(toProjk))||{}).label);
 }
 function unmergeProject(projk){ delete projMerge[projk]; Object.keys(projMerge).forEach(k=>{ if(projMerge[k]===projk) delete projMerge[k]; }); persist(); renderCatalog(); }
 const BASE_CATS=['Module','IDU','ODU','Dongle'];               // built-ins (General is always the catch-all, kept last)
@@ -1077,26 +1077,26 @@ function allCats(){
 }
 function addCategory(name){
   name=String(name||'').trim(); if(!name) return;
-  if(allCats().some(c=>c.toLowerCase()===name.toLowerCase())){ toast('分類「'+name+'」已存在'); return; }
-  projCats.push(name); persist(); renderCatalog(); toast('已新增分類：'+name);
+  if(allCats().some(c=>c.toLowerCase()===name.toLowerCase())){ toast('Category "'+name+'" already exists'); return; }
+  projCats.push(name); persist(); renderCatalog(); toast('Category added: '+name);
 }
 function renameCategory(oldName, newName){
   newName=String(newName||'').trim(); if(!newName||newName===oldName) return;
-  if(BASE_CATS.includes(oldName)||oldName==='General'){ toast('內建分類不可改名'); return; }
+  if(BASE_CATS.includes(oldName)||oldName==='General'){ toast('Built-in categories cannot be renamed'); return; }
   const i=projCats.findIndex(c=>c===oldName); if(i<0) return;
-  if(allCats().some(c=>c.toLowerCase()===newName.toLowerCase())){ toast('分類「'+newName+'」已存在'); return; }
+  if(allCats().some(c=>c.toLowerCase()===newName.toLowerCase())){ toast('Category "'+newName+'" already exists'); return; }
   projCats[i]=newName;
   Object.keys(projMeta).forEach(k=>{ if(projMeta[k] && projMeta[k].category===oldName) projMeta[k].category=newName; });  // move projects over
   if(catOpen && oldName in catOpen){ catOpen[newName]=catOpen[oldName]; delete catOpen[oldName]; store.save('wrt_catopen',catOpen); }
-  persist(); renderCatalog(); toast('分類已改名為：'+newName);
+  persist(); renderCatalog(); toast('Category renamed to: '+newName);
 }
 function deleteCategory(name){
-  if(BASE_CATS.includes(name)||name==='General'){ toast('內建分類不可刪除'); return; }
+  if(BASE_CATS.includes(name)||name==='General'){ toast('Built-in categories cannot be deleted'); return; }
   const used=projectGroups().filter(g=>projCategory(g)===name).length;
-  if(!confirm('刪除分類「'+name+'」？'+(used?('其下 '+used+' 個專案會移回 General。'):'')+'\n（不會刪除任何專案或任務）')) return;
+  if(!confirm('Delete category "'+name+'"?'+(used?('its '+used+' project(s) will move back to General.'):'')+'\n(no projects or tasks are deleted)')) return;
   projCats=projCats.filter(c=>c!==name);
   Object.keys(projMeta).forEach(k=>{ if(projMeta[k] && projMeta[k].category===name) projMeta[k].category=''; });  // back to auto/General
-  persist(); renderCatalog(); toast('已刪除分類：'+name);
+  persist(); renderCatalog(); toast('Category deleted: '+name);
 }
 function setProjCategory(projk, cat){
   const m=projMeta[projk]||{}; m.category=(cat==='General'? '' : cat);   // '' = auto-infer (lands in General if nothing matches)
@@ -1106,13 +1106,13 @@ function deleteProjectGroup(projk){
   const rk=resolveProjk(projk);
   const g=projectGroups().find(x=>x.projk===rk); if(!g) return;
   const tn=g.tasks.length;
-  if(!confirm('刪除專案「'+g.label+'」'+(tn?('及其 '+tn+' 筆任務'):'（無任務）')+'？此動作無法復原。')) return;
-  if(tn && !confirm('再次確認：真的要刪除「'+g.label+'」及其任務嗎？')) return;
+  if(!confirm('Delete project "'+g.label+'"'+(tn?('and its '+tn+' tasks'):'(no tasks)')+'"? This cannot be undone.')) return;
+  if(tn && !confirm('Confirm again: really delete "'+g.label+'" and its tasks?')) return;
   const ids=new Set(g.tasks.map(t=>t.id));
   tasks.forEach(t=>{ if(ids.has(t.id)) (t.images||[]).forEach(im=>cloudDeleteImage(im.id)); });  // sync-delete cloud images
   tasks=tasks.filter(t=>!ids.has(t.id));
   delete projMeta[g.projk]; delete projMeta[projk];                 // also drop its master record
-  persist(); renderAll(); toast('已刪除專案：'+g.label);
+  persist(); renderAll(); toast('Project deleted: '+g.label);
 }
 /* ---------- PROJECT MASTER LIST (manually added / pasted, stored in your cloud — never in the repo) ---------- */
 const PHASES=['','Kickoff','ES','EVT','DVT','PVT','MP','Done','Hold'];   // '' = 未設定階段
@@ -1136,7 +1136,7 @@ function parseProjectList(text){                        // one project per line:
 }
 function importProjectList(text){
   const rows=parseProjectList(text);
-  if(!rows.length){ toast('沒有解析到專案。格式：代號 | 客戶 | 類別 | Chipset | 說明'); return; }
+  if(!rows.length){ toast('No projects parsed. Format: Code | Customer | Category | Chipset | Description'); return; }
   // detect variants that share a base code (B01W025.00/.01/.02) so they become SEPARATE cards;
   // a unique code keeps its base key so it still auto-links to the matching tasks.
   const base={}, cnt={}; rows.forEach(r=>{ const b=projMasterKey(r.code); base[r.code]=b; cnt[b]=(cnt[b]||0)+1; });
@@ -1158,10 +1158,10 @@ function importProjectList(text){
       && !visibleTasks().some(t=>resolveProjk(t.projk||t.key)===b)) delete projMeta[b]; });
   persist(); renderCatalog(); renderStats();
   $('#projListModal').hidden=true;
-  toast('已匯入 '+rows.length+' 行，建立 '+keys.size+' 個專案');
+  toast('Imported '+rows.length+' lines, created '+keys.size+' projects');
 }
 function addBlankProject(){
-  const code=prompt('新增專案代號（例：B01W050.00）：'); if(!code||!code.trim()) return;
+  const code=prompt('New project code (e.g. B01W050.00):'); if(!code||!code.trim()) return;
   const k=projMasterKey(code);
   projMeta[k]=Object.assign({master:true, code:code.trim()}, projMeta[k]||{}, {master:true});
   editingProj=k; persist(); renderCatalog();
@@ -1235,52 +1235,52 @@ function renderScheduleEditor(){
   const rows=(sched.items||[]).map((it,i)=>`<tr>
     <td><select data-si="${i}" data-sf="lane">${sched.lanes.map(l=>`<option ${it.lane===l?'selected':''}>${esc(l)}</option>`).join('')}</select></td>
     <td><select data-si="${i}" data-sf="type">${['dot','bar','star'].map(t=>`<option ${it.type===t?'selected':''}>${t}</option>`).join('')}</select></td>
-    <td><input data-si="${i}" data-sf="label" value="${esc(it.label||'')}" placeholder="名稱"></td>
+    <td><input data-si="${i}" data-sf="label" value="${esc(it.label||'')}" placeholder="Label"></td>
     <td><input type="date" data-si="${i}" data-sf="date" value="${esc(it.date||'')}"></td>
-    <td><input type="date" data-si="${i}" data-sf="end" value="${esc(it.end||'')}" title="bar 結束日"></td>
-    <td><input data-si="${i}" data-sf="note" value="${esc(it.note||'')}" placeholder="附註"></td>
+    <td><input type="date" data-si="${i}" data-sf="end" value="${esc(it.end||'')}" title="bar end date"></td>
+    <td><input data-si="${i}" data-sf="note" value="${esc(it.note||'')}" placeholder="Note"></td>
     <td><button class="btn xs danger" data-sdel="${i}">✕</button></td></tr>`).join('');
   const refs=((projMeta[_schedEdit.projk]||{}).images||[]).filter(im=>/schedule/i.test(im.title||''));
-  const refStrip=refs.length?`<div class="sched-refs">${refs.map(im=>`<span class="pimg-item"><img src="${im.data}" data-light="${im.id}"><div class="pimg-cap">原始 Schedule 附檔</div><button class="img-del" data-pdelimg="${esc(_schedEdit.projk)}|${im.id}" title="刪除">✕</button></span>`).join('')}</div>`:'';
+  const refStrip=refs.length?`<div class="sched-refs">${refs.map(im=>`<span class="pimg-item"><img src="${im.data}" data-light="${im.id}"><div class="pimg-cap">Original schedule attachment</div><button class="img-del" data-pdelimg="${esc(_schedEdit.projk)}|${im.id}" title="Delete">✕</button></span>`).join('')}</div>`:'';
   $('#scheduleInner').innerHTML=`
     <div class="modal-head"><h2>📅 Schedule · ${esc(title)}</h2><button class="icon-btn" data-close>✕</button></div>
     <div class="modal-body">
-      <div class="sched-preview">${(sched.items&&sched.items.length)?scheduleSVG(sched):'<p class="hint">上傳原始 Schedule 附檔、或按「套用預設模板」，下方就會帶出里程碑，這裡即時畫出時間軸。</p>'}</div>
+      <div class="sched-preview">${(sched.items&&sched.items.length)?scheduleSVG(sched):'<p class="hint">Upload your original schedule, or click "Apply default template" — milestones appear below and the timeline draws live here.</p>'}</div>
       <div class="sched-attach">
-        <label class="btn sm">📎 上傳 Schedule 附檔<input type="file" accept="image/*" hidden data-saddimg="1"></label>
-        <button class="btn sm" data-stemplate="1">套用預設里程碑模板</button>
-        <span class="hint">上傳你原本畫好的 Schedule 當參考，會自動帶出一張預設里程碑讓你改。</span>
+        <label class="btn sm">📎 Upload schedule file<input type="file" accept="image/*" hidden data-saddimg="1"></label>
+        <button class="btn sm" data-stemplate="1">Apply default template</button>
+        <span class="hint">Upload your existing schedule as reference; a default milestone set is added for you to edit.</span>
       </div>
       ${refStrip}
       <div class="sched-controls">
-        <label>起 <input type="date" data-smeta="start" value="${esc(sched.start||'')}"></label>
-        <label>訖 <input type="date" data-smeta="end" value="${esc(sched.end||'')}"></label>
-        <label class="wide">泳道（逗號分隔）<input data-smeta="lanes" value="${esc(sched.lanes.join(', '))}"></label>
-        <label class="wide">標題附註 <input data-smeta="note" value="${esc(sched.note||'')}" placeholder="顯示在時間軸上方的說明文字（選填）"></label>
+        <label>From <input type="date" data-smeta="start" value="${esc(sched.start||'')}"></label>
+        <label>To <input type="date" data-smeta="end" value="${esc(sched.end||'')}"></label>
+        <label class="wide">Lanes (comma-separated)<input data-smeta="lanes" value="${esc(sched.lanes.join(', '))}"></label>
+        <label class="wide">Title note <input data-smeta="note" value="${esc(sched.note||'')}" placeholder="Caption shown above the timeline (optional)"></label>
       </div>
-      <table class="sched-table"><thead><tr><th>泳道</th><th>類型</th><th>名稱</th><th>日期</th><th>結束(bar)</th><th>附註</th><th></th></tr></thead><tbody>${rows}</tbody></table>
-      <button class="btn sm" data-sadd="1">＋ 新增里程碑</button>
-      <p class="hint">類型：dot＝里程碑點、star＝重點樣品（粉紅星）、bar＝跨週活動（要填結束日）。改任何欄位上方時間軸即時更新。</p>
+      <table class="sched-table"><thead><tr><th>Lane</th><th>Type</th><th>Label</th><th>Date</th><th>End (bar)</th><th>Note</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+      <button class="btn sm" data-sadd="1">＋ Add milestone</button>
+      <p class="hint">Type: dot = milestone, star = key sample (pink), bar = multi-week activity (needs an end date). Editing any field updates the timeline live.</p>
     </div>
     <div class="modal-foot">
       <button class="btn" data-sppt="1">⬇ PowerPoint</button>
       <button class="btn" data-sxlsx="1">⬇ Excel</button>
       <button class="btn" data-sdownload="1">⬇ PNG</button>
-      <button class="btn" data-close>取消</button>
-      <button class="btn primary" data-ssave="1">儲存 Schedule</button>
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn primary" data-ssave="1">Save schedule</button>
     </div>`;
 }
 function addSchedItem(){ _schedEdit.sched.items.push({lane:_schedEdit.sched.lanes[0]||'Milestone', type:'dot', label:'', date:'', end:'', note:''}); renderScheduleEditor(); }
 function delSchedItem(i){ _schedEdit.sched.items.splice(+i,1); renderScheduleEditor(); }
 function updSchedItem(i,f,v){ _schedEdit.sched.items[+i][f]=v; renderScheduleEditor(); }
-function updSchedMeta(f,v){ if(f==='lanes') _schedEdit.sched.lanes=v.split(/[,，]/).map(x=>x.trim()).filter(Boolean); else _schedEdit.sched[f]=v; renderScheduleEditor(); }
-function saveScheduleEdit(){ const m=projMeta[_schedEdit.projk]||{}; m.schedule=_schedEdit.sched; projMeta[_schedEdit.projk]=m; persist(); renderCatalog(); $('#scheduleModal').hidden=true; toast('已儲存 Schedule'); }
+function updSchedMeta(f,v){ if(f==='lanes') _schedEdit.sched.lanes=v.split(/[,, ]/).map(x=>x.trim()).filter(Boolean); else _schedEdit.sched[f]=v; renderScheduleEditor(); }
+function saveScheduleEdit(){ const m=projMeta[_schedEdit.projk]||{}; m.schedule=_schedEdit.sched; projMeta[_schedEdit.projk]=m; persist(); renderCatalog(); $('#scheduleModal').hidden=true; toast('Schedule saved'); }
 function downloadSchedulePNG(){
   const svg=scheduleSVG(_schedEdit.sched), blob=new Blob([svg],{type:'image/svg+xml;charset=utf-8'}), url=URL.createObjectURL(blob);
   const img=new Image(); img.onload=()=>{ const c=document.createElement('canvas'); c.width=img.naturalWidth*2; c.height=img.naturalHeight*2;
     const ctx=c.getContext('2d'); ctx.scale(2,2); ctx.fillStyle='#fff'; ctx.fillRect(0,0,img.naturalWidth,img.naturalHeight); ctx.drawImage(img,0,0); URL.revokeObjectURL(url);
     c.toBlob(b=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=((_schedEdit.title||'project')+'_schedule.png').replace(/[\\/:*?"<>|]/g,'_'); a.click(); }); };
-  img.onerror=()=>{ URL.revokeObjectURL(url); toast('PNG 匯出失敗'); }; img.src=url;
+  img.onerror=()=>{ URL.revokeObjectURL(url); toast('PNG export failed'); }; img.src=url;
 }
 function seedDefaultSchedule(){                         // a standard HW/SW milestone template the user then adjusts
   if(_schedEdit.sched.items && _schedEdit.sched.items.length) return false;
@@ -1299,10 +1299,10 @@ function seedDefaultSchedule(){                         // a standard HW/SW mile
   ];
   return true;
 }
-function applyDefaultTemplate(){ if(seedDefaultSchedule()){ renderScheduleEditor(); toast('已帶出預設里程碑模板，請依實際調整'); } else toast('已有里程碑（先清空才會套模板）'); }
+function applyDefaultTemplate(){ if(seedDefaultSchedule()){ renderScheduleEditor(); toast('Default milestone template added — adjust to your real dates'); } else toast('Milestones already exist (clear them first to apply the template)'); }
 async function uploadScheduleAttach(fileList){
-  const n=await addProjectImages(_schedEdit.projk, fileList, 'Schedule 附檔', 'Schedule');
-  if(n){ const seeded=seedDefaultSchedule(); renderScheduleEditor(); if(seeded) toast('已附上 Schedule，並帶出預設里程碑，請調整'); }
+  const n=await addProjectImages(_schedEdit.projk, fileList, 'Schedule attachment', 'Schedule');
+  if(n){ const seeded=seedDefaultSchedule(); renderScheduleEditor(); if(seeded) toast('Schedule attached and a default milestone template added — adjust it'); }
 }
 function exportSchedulePPT(){
   const svg=scheduleSVG(_schedEdit.sched), blob=new Blob([svg],{type:'image/svg+xml;charset=utf-8'}), url=URL.createObjectURL(blob);
@@ -1314,10 +1314,10 @@ function exportSchedulePPT(){
       s.addText((_schedEdit.title||'')+' Development Schedule',{x:0.4,y:0.22,w:12.5,h:0.6,fontSize:24,bold:true,color:'1A3B79'});
       const maxW=12.6,maxH=6.2; let fw=maxW, fh=fw*ih/iw; if(fh>maxH){ fh=maxH; fw=fh*iw/ih; }
       s.addImage({data:dataUrl, x:(13.33-fw)/2, y:1.0, w:fw, h:fh});
-      P.writeFile({fileName:((_schedEdit.title||'project')+'_schedule.pptx').replace(/[\\/:*?"<>|]/g,'_')}); toast('PowerPoint 已下載');
-    }catch(e){ console.warn(e); toast('PPT 匯出失敗'); }
+      P.writeFile({fileName:((_schedEdit.title||'project')+'_schedule.pptx').replace(/[\\/:*?"<>|]/g,'_')}); toast('PowerPoint downloaded');
+    }catch(e){ console.warn(e); toast('PPT export failed'); }
   };
-  img.onerror=()=>{ URL.revokeObjectURL(url); toast('PPT 匯出失敗'); }; img.src=url;
+  img.onerror=()=>{ URL.revokeObjectURL(url); toast('PPT export failed'); }; img.src=url;
 }
 // Excel with the full-colour schedule image embedded. The free SheetJS can't embed images,
 // so we build the .xlsx (OOXML zip) by hand with JSZip and float the PNG over the sheet.
@@ -1340,11 +1340,11 @@ function exportScheduleExcel(){
       zip.file('xl/drawings/_rels/drawing1.xml.rels',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships ${NS}><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/></Relationships>`);
       zip.file('xl/media/image1.png', b64, {base64:true});
       zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}).then(out=>{
-        downloadBlob(out, ((_schedEdit.title||'project')+'_schedule.xlsx').replace(/[\\/:*?"<>|]/g,'_')); toast('Excel（含彩色時間軸）已下載');
-      }).catch(e=>{ console.warn(e); toast('Excel 匯出失敗'); });
-    }catch(e){ console.warn(e); toast('Excel 匯出失敗'); }
+        downloadBlob(out, ((_schedEdit.title||'project')+'_schedule.xlsx').replace(/[\\/:*?"<>|]/g,'_')); toast('Excel (with the colour timeline) downloaded');
+      }).catch(e=>{ console.warn(e); toast('Excel export failed'); });
+    }catch(e){ console.warn(e); toast('Excel export failed'); }
   };
-  img.onerror=()=>{ URL.revokeObjectURL(url); toast('Excel 匯出失敗'); }; img.src=url;
+  img.onerror=()=>{ URL.revokeObjectURL(url); toast('Excel export failed'); }; img.src=url;
 }
 /* ---------- DESIGN DOCUMENTS (block diagram / GPIO table / architecture …), per project, cloud-synced ---------- */
 // stored per project in projMeta[projk].images (each image may carry a `title`). Two-level browser: pick a project -> its docs.
@@ -1358,61 +1358,61 @@ function renderDesignDocs(){
     return `<div class="dd-card" data-ddopen="${esc(g.projk)}">
       <div class="dd-thumb">${thumb?`<img src="${thumb.data}">`:'<span class="dd-noimg">📐</span>'}</div>
       <div class="dd-cardbody"><div class="dd-cardtitle">${esc(m.code||g.label)}</div>
-        <div class="dd-cardsub"><span class="cat-name cat-${esc(projCategory(g))}">${esc(projCategory(g))}</span> · ${imgs.length} 份文件</div></div></div>`;
+        <div class="dd-cardsub"><span class="cat-name cat-${esc(projCategory(g))}">${esc(projCategory(g))}</span> · ${imgs.length} docs</div></div></div>`;
   }).join('');
   $('#projImgInner').innerHTML=`
     <div class="modal-head"><h2>📐 Design Documents</h2><button class="icon-btn" data-close>✕</button></div>
     <div class="modal-body">
-      <p class="hint">點任一專案，進去上傳／檢視它的設計文件（方塊圖、GPIO Table、架構圖、Schematic…）。</p>
-      <div class="dd-cards">${cards||'<p class="hint">尚無專案，請先到專案總覽建立。</p>'}</div>
+      <p class="hint">Open a project to upload / view its design documents (block diagram, GPIO table, architecture, schematic…).</p>
+      <div class="dd-cards">${cards||'<p class="hint">No projects yet — create some in the catalog first.</p>'}</div>
     </div>
-    <div class="modal-foot"><button class="btn" data-close>關閉</button></div>`;
+    <div class="modal-foot"><button class="btn" data-close>Close</button></div>`;
 }
-const DOC_FOLDERS=['Block Diagram','GPIO Table','Schematic','Layout','Spec','其他'];
+const DOC_FOLDERS=['Block Diagram','GPIO Table','Schematic','Layout','Spec','Other'];
 function renderDesignDocsProject(){
   const projk=_ddProjk, m=projMeta[projk]||{}, imgs=m.images||[];
   const g=projectGroups().find(x=>x.projk===resolveProjk(projk));
   // group docs into folders (by their `folder`), list-view rows inside each folder
-  const byFolder={}; imgs.forEach(im=>{ const f=im.folder||'其他'; (byFolder[f]=byFolder[f]||[]).push(im); });
+  const byFolder={}; imgs.forEach(im=>{ const f=im.folder||'Other'; (byFolder[f]=byFolder[f]||[]).push(im); });
   const folders=[...DOC_FOLDERS.filter(f=>byFolder[f]), ...Object.keys(byFolder).filter(f=>!DOC_FOLDERS.includes(f))];
   const body= imgs.length ? folders.map(f=>`
       <div class="dd-folder">
         <div class="dd-folder-head">📁 ${esc(f)} <span class="ct-n">${byFolder[f].length}</span></div>
-        <div class="dd-list">${byFolder[f].map(im=>`<div class="dd-row"><img class="dd-rowthumb" src="${im.data}" data-light="${im.id}"><span class="dd-rowtitle">${esc(im.title||'未命名文件')}</span><button class="img-del" data-pdelimg="${esc(projk)}|${im.id}" title="刪除">✕</button></div>`).join('')}</div>
-      </div>`).join('') : '<p class="hint">這個專案還沒有設計文件，選資料夾、填名稱後從右邊上傳第一份。</p>';
+        <div class="dd-list">${byFolder[f].map(im=>`<div class="dd-row"><img class="dd-rowthumb" src="${im.data}" data-light="${im.id}"><span class="dd-rowtitle">${esc(im.title||'Untitled')}</span><button class="img-del" data-pdelimg="${esc(projk)}|${im.id}" title="Delete">✕</button></div>`).join('')}</div>
+      </div>`).join('') : '<p class="hint">No design documents yet — pick a folder, enter a name, and upload the first one.</p>';
   $('#projImgInner').innerHTML=`
-    <div class="modal-head"><h2><button class="btn xs" data-ddback="1">← 返回</button> &nbsp;📐 ${esc(m.code||(g&&g.label)||projk)} · 設計文件</h2><button class="icon-btn" data-close>✕</button></div>
+    <div class="modal-head"><h2><button class="btn xs" data-ddback="1">← Back</button> &nbsp;📐 ${esc(m.code||(g&&g.label)||projk)} · Design documents</h2><button class="icon-btn" data-close>✕</button></div>
     <div class="modal-body">
       <div class="dd-upload">
-        <select id="ddFolder" title="資料夾 / 分類">${DOC_FOLDERS.map(f=>`<option>${esc(f)}</option>`).join('')}</select>
-        <input id="ddTitle" placeholder="文件名稱（例：RX Block、Top GPIO）">
-        <label class="btn sm primary">＋ 上傳<input type="file" accept="image/*" multiple hidden data-ddaddimg="1"></label>
+        <select id="ddFolder" title="Folder / category">${DOC_FOLDERS.map(f=>`<option>${esc(f)}</option>`).join('')}</select>
+        <input id="ddTitle" placeholder="Document name (e.g. RX Block, Top GPIO)">
+        <label class="btn sm primary">＋ Upload<input type="file" accept="image/*" multiple hidden data-ddaddimg="1"></label>
       </div>
-      <p class="hint">選資料夾（Block Diagram / GPIO Table / Schematic…）→ 填名稱 → 上傳。點縮圖放大、可刪除，雲端自動同步。</p>
+      <p class="hint">Pick a folder (Block Diagram / GPIO Table / Schematic…) → enter a name → upload. Click a thumbnail to enlarge; delete anytime; synced to the cloud.</p>
       ${body}
     </div>
-    <div class="modal-foot"><button class="btn" data-close>關閉</button></div>`;
+    <div class="modal-foot"><button class="btn" data-close>Close</button></div>`;
 }
 async function addProjectImages(projk, fileList, title, folder){
   const all=Array.from(fileList||[]);
-  const files=all.filter(f=>!f.type || /^image\//.test(f.type));   // input already限定圖片；手機某些格式 type 會是空字串，也放行
-  if(!files.length){ toast(all.length?'這個檔案不是圖片':'沒有選到檔案'); return 0; }
-  toast('處理圖片中…請稍候');
+  const files=all.filter(f=>!f.type || /^image\//.test(f.type));   // input already限定圖片；手機某些格式 type 會是空字串, 也放行
+  if(!files.length){ toast(all.length?'This file is not an image':'No file selected'); return 0; }
+  toast('Processing image… please wait');
   const m=projMeta[projk]||{}; m.images=m.images||[]; let n=0;
   for(const f of files){ try{ const s=await shrinkImageBudget(await fileToDataURL(f), 2200); m.images.push({id:uid(), data:s.data, w:s.w, h:s.h, title:title||'', folder:folder||''}); n++; }catch(e){ console.warn('project image failed', e); } }
-  if(!n){ toast('圖片處理失敗，請換個檔案試試'); return 0; }
+  if(!n){ toast('Image processing failed — try another file'); return 0; }
   projMeta[projk]=m; persist(); renderCatalog();
   if(!$('#projImgModal').hidden) renderDesignDocs();
   if(!$('#scheduleModal').hidden) renderScheduleEditor();
-  toast('已新增 '+n+' 張圖片'); return n;
+  toast('Added '+n+' image(s)'); return n;
 }
 function removeProjectImage(projk, id){
   const m=projMeta[projk]; if(!m||!m.images) return;
-  if(!confirm('確定刪除這張圖片？刪除後無法復原。')) return;
+  if(!confirm('Delete this image? This cannot be undone.')) return;
   m.images=m.images.filter(x=>x.id!==id); cloudDeleteImage(id); persist(); renderCatalog();
   if(!$('#projImgModal').hidden) renderDesignDocs();
   if(!$('#scheduleModal').hidden) renderScheduleEditor();
-  toast('已移除圖片');
+  toast('Image removed');
 }
 function inferCategory(projStr){
   const s=String(projStr||'').toLowerCase();
@@ -1425,29 +1425,29 @@ function inferCategory(projStr){
 function projCategory(g){ const m=projMeta[g.projk]||{}; return m.category && allCats().includes(m.category)? m.category : (m.category||inferCategory(g.projStr||g.label)); }
 function renderCatalog(){
   const sel=$('#catalogMember');
-  if(sel) sel.innerHTML='<option value="">All members · 全部成員</option>'+
+  if(sel) sel.innerHTML='<option value="">All members · All members</option>'+
     members.map(m=>`<option value="${m.id}" ${catalogMember===m.id?'selected':''}>${esc(m.name)}</option>`).join('');
   let groups=projectGroups();
   if(catalogMember) groups=groups.map(g=>({...g, tasks:g.tasks.filter(t=>(t.ownerIds||[]).includes(catalogMember))}))
                                   .filter(g=>g.tasks.length);
   const cont=$('#projectCatalog'); if(!cont) return;
   if(!groups.length){
-    cont.innerHTML=`<div class="cat-tabs"><button class="btn xs primary cat-addtab" data-addcat="1">＋ 新增分類</button></div><p class="hint">尚無專案，請先匯入週報或在上方「＋ 新增專案 / 貼上清單」建立。</p>`; return; }
+    cont.innerHTML=`<div class="cat-tabs"><button class="btn xs primary cat-addtab" data-addcat="1">＋ Add category</button></div><p class="hint">No projects yet — import reports, or use "＋ Add project / Paste list" above.</p>`; return; }
   const byCat={}; groups.forEach(g=>{ const c=projCategory(g); (byCat[c]=byCat[c]||[]).push(g); });
   const order=[...allCats(), ...Object.keys(byCat).filter(c=>!allCats().includes(c))];
   const present=order.filter(c=>byCat[c]);
   if(catFilter && !byCat[catFilter]) catFilter='';            // selected tab emptied -> back to all
   // ONE tab bar = filter + manage. Click a tab -> show only that category's projects (flat, no extra collapse).
-  const tab=(c,lbl,n,manage)=>`<button class="cat-tab cat-${esc(c)} ${catFilter===c?'active':''}" data-catfilter="${esc(c)}">${esc(lbl)} <span class="ct-n">${n}</span>${manage?`<span class="cc-x" data-renamecat="${esc(c)}" title="改名">✎</span><span class="cc-x" data-delcat="${esc(c)}" title="刪除分類">✕</span>`:''}</button>`;
+  const tab=(c,lbl,n,manage)=>`<button class="cat-tab cat-${esc(c)} ${catFilter===c?'active':''}" data-catfilter="${esc(c)}">${esc(lbl)} <span class="ct-n">${n}</span>${manage?`<span class="cc-x" data-renamecat="${esc(c)}" title="Rename">✎</span><span class="cc-x" data-delcat="${esc(c)}" title="Delete category">✕</span>`:''}</button>`;
   const tabBar=`<div class="cat-tabs">
-      ${tab('','全部',groups.length,false)}
+      ${tab('','All',groups.length,false)}
       ${present.map(c=>tab(c,c,byCat[c].length,(!BASE_CATS.includes(c)&&c!=='General'))).join('')}
-      <button class="btn xs primary cat-addtab" data-addcat="1" title="新增自訂分類">＋ 新增分類</button>
+      <button class="btn xs primary cat-addtab" data-addcat="1" title="Add a custom category">＋ Add category</button>
     </div>`;
   const showCats = catFilter ? [catFilter] : present;
   const sections = showCats.map(c=>{
     const list=byCat[c]; const nTasks=list.reduce((s,g)=>s+g.tasks.length,0);
-    const head = catFilter ? '' : `<div class="cat-sec-head"><span class="cat-name cat-${esc(c)}">${esc(c)}</span><span class="cat-meta">${list.length} 專案 · ${nTasks} 任務</span></div>`;
+    const head = catFilter ? '' : `<div class="cat-sec-head"><span class="cat-name cat-${esc(c)}">${esc(c)}</span><span class="cat-meta">${list.length} projects · ${nTasks} tasks</span></div>`;
     return head + `<div class="cat-sec">${list.map(catalogCard).join('')}</div>`;
   }).join('');
   cont.innerHTML = tabBar + sections;
@@ -1461,19 +1461,19 @@ function catalogCard(g){
   const sub=`${g.tasks.length} tasks · ${g.mem.size} members · ${g.high} high risk · ${g.closed} closed`;
   const curCat=projCategory(g);
   const curPhase=meta.phase||'';
-  const phaseSel=`<select class="pc-phase-sel${curPhase?' has-phase':''}" data-setphase="${esc(g.projk)}" title="專案階段 / Phase">${PHASES.map(p=>`<option value="${esc(p)}" ${curPhase===p?'selected':''}>${p||'階段…'}</option>`).join('')}</select>`;
+  const phaseSel=`<select class="pc-phase-sel${curPhase?' has-phase':''}" data-setphase="${esc(g.projk)}" title="Project phase">${PHASES.map(p=>`<option value="${esc(p)}" ${curPhase===p?'selected':''}>${p||'Phase…'}</option>`).join('')}</select>`;
   // read view: a category dropdown is ALWAYS shown — change it to recategorize instantly (no Edit mode needed)
-  const catSelectRead=`<select class="pc-cat-sel cat-${esc(curCat)}" data-setcat="${esc(g.projk)}" title="變更分類">${allCats().map(c=>`<option ${curCat===c?'selected':''}>${esc(c)}</option>`).join('')}</select>`;
+  const catSelectRead=`<select class="pc-cat-sel cat-${esc(curCat)}" data-setcat="${esc(g.projk)}" title="Change category">${allCats().map(c=>`<option ${curCat===c?'selected':''}>${esc(c)}</option>`).join('')}</select>`;
   // edit mode: category is part of the form, saved together with the other fields on 儲存 (no premature re-render)
-  const catSelectEdit=`<select class="pc-in" data-mf="category">${['',...allCats()].map(c=>`<option value="${esc(c)}" ${(meta.category||curCat)===c?'selected':''}>${c||'(類別)'}</option>`).join('')}</select>`;
+  const catSelectEdit=`<select class="pc-in" data-mf="category">${['',...allCats()].map(c=>`<option value="${esc(c)}" ${(meta.category||curCat)===c?'selected':''}>${c||'(category)'}</option>`).join('')}</select>`;
   const metaRow = ed
     ? `<div class="pc-meta editing">
-         <input class="pc-in" data-mf="code" placeholder="代號 Code" value="${esc(meta.code||'')}">
-         <input class="pc-in" data-mf="customer" placeholder="客戶 Customer" value="${esc(meta.customer||'')}">
+         <input class="pc-in" data-mf="code" placeholder="Code" value="${esc(meta.code||'')}">
+         <input class="pc-in" data-mf="customer" placeholder="Customer" value="${esc(meta.customer||'')}">
          ${catSelectEdit}
          <input class="pc-in" data-mf="chipset" placeholder="Chipset" value="${esc(meta.chipset||'')}">
-         <input class="pc-in wide" data-mf="desc" placeholder="說明 Description" value="${esc(desc)}">
-         <button class="btn sm primary" data-save-proj="${esc(g.projk)}">儲存</button>
+         <input class="pc-in wide" data-mf="desc" placeholder="Description" value="${esc(desc)}">
+         <button class="btn sm primary" data-save-proj="${esc(g.projk)}">Save</button>
        </div>`
     : `<div class="pc-meta">
          <div class="pc-cell">${esc(meta.customer||'—')}</div>
@@ -1482,16 +1482,16 @@ function catalogCard(g){
        </div>`;
   const merged=Object.keys(projMerge).filter(k=>resolveProjk(k)===g.projk).length;
   const chipLine=meta.chipset?` · <span class="pc-chipset">Chipset: ${esc(meta.chipset)}</span>`:'';
-  const masterTag=(meta.master&&!g.tasks.length)?' <span class="master-tag" title="主檔專案（尚無任務）">主檔</span>':'';
+  const masterTag=(meta.master&&!g.tasks.length)?' <span class="master-tag" title="Master project (no tasks yet)">Master</span>':'';
   return `<div class="proj-card cat-b-${esc(curCat)}" draggable="true" data-projk="${esc(g.projk)}">
     <div class="pc-head">
-      <div><h3><span class="drag-dot" title="拖曳此專案併到另一個">⠿</span> ${esc(g.label)}${masterTag}${merged?` <span class="merged-tag" title="已併入其他專案">＋${merged} 併</span>`:''}</h3><div class="pc-sub">${sub}${chipLine}</div></div>
+      <div><h3><span class="drag-dot" title="Drag to merge into another project">⠿</span> ${esc(g.label)}${masterTag}${merged?` <span class="merged-tag" title="Merged into another project">＋${merged} merged</span>`:''}</h3><div class="pc-sub">${sub}${chipLine}</div></div>
       <div class="pc-actions">
         ${phaseSel}
-        <button class="btn pc-act" data-sched="${esc(g.projk)}" title="專案 Schedule 時間軸">📅 Schedule${(meta.schedule&&(meta.schedule.items||[]).length)?' ('+meta.schedule.items.length+')':''}</button>
-        ${merged?`<button class="btn pc-act" data-unmerge="${esc(g.projk)}" title="取消併入">↩ 取消併</button>`:''}
-        <button class="btn pc-act" data-edit-proj="${esc(g.projk)}">${ed?'取消':'✎ Edit'}</button>
-        <button class="btn pc-act danger" data-delproj="${esc(g.projk)}" title="刪除此專案">🗑 刪除</button>
+        <button class="btn pc-act" data-sched="${esc(g.projk)}" title="Project schedule timeline">📅 Schedule${(meta.schedule&&(meta.schedule.items||[]).length)?' ('+meta.schedule.items.length+')':''}</button>
+        ${merged?`<button class="btn pc-act" data-unmerge="${esc(g.projk)}" title="Undo merge">↩ Unmerge</button>`:''}
+        <button class="btn pc-act" data-edit-proj="${esc(g.projk)}">${ed?'Cancel':'✎ Edit'}</button>
+        <button class="btn pc-act danger" data-delproj="${esc(g.projk)}" title="Delete this project">🗑 Delete</button>
       </div>
     </div>
     ${metaRow}
@@ -1503,21 +1503,21 @@ function catalogCard(g){
 }
 function memberOptionsByRole(excludeIds){
   const ex=new Set(excludeIds||[]);
-  const groups={}; members.filter(m=>!ex.has(m.id)).forEach(m=>{ const r=m.role||'未分類'; (groups[r]=groups[r]||[]).push(m); });
-  return [...ROLES,'未分類'].filter(r=>groups[r]).map(r=>
+  const groups={}; members.filter(m=>!ex.has(m.id)).forEach(m=>{ const r=m.role||'Unassigned'; (groups[r]=groups[r]||[]).push(m); });
+  return [...ROLES,'Unassigned'].filter(r=>groups[r]).map(r=>
     `<optgroup label="${r}">${groups[r].map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('')}</optgroup>`).join('');
 }
 function catalogTaskRow(t){
-  const owners=(t.ownerIds||[]).map(id=>`<span class="owner-chip">${memberRoleBadges(id)}${esc(memberName(id))}<button data-rmowner="${t.id}|${id}" title="移除">×</button></span>`).join('')||'<span class="owner-chip none">Unassigned</span>';
+  const owners=(t.ownerIds||[]).map(id=>`<span class="owner-chip">${memberRoleBadges(id)}${esc(memberName(id))}<button data-rmowner="${t.id}|${id}" title="Remove">×</button></span>`).join('')||'<span class="owner-chip none">Unassigned</span>';
   return `<div class="ctask">
-    <div class="ctask-desc" data-opentask="${t.id}">${esc((t.current||t.next||'(無描述)').slice(0,150))}
+    <div class="ctask-desc" data-opentask="${t.id}">${esc((t.current||t.next||'(no description)').slice(0,150))}
       <span class="tag st-${t.status}">${esc(t.status)}</span>${isClosed(t)?' <span class="tag closed">✓ Closed</span>':''}</div>
     <div class="ctask-ctl">
-      <span class="owners">${owners}<select class="add-owner" data-addowner="${t.id}"><option value="">＋ 加人</option>${memberOptionsByRole(t.ownerIds)}</select></span>
+      <span class="owners">${owners}<select class="add-owner" data-addowner="${t.id}"><option value="">＋ Add owner</option>${memberOptionsByRole(t.ownerIds)}</select></span>
       <label>Risk<select data-edit="risk" data-tid="${t.id}">${optTags(['Low','Medium','High'],t.risk)}</select></label>
       <label>Cx<select data-edit="complexity" data-tid="${t.id}">${optTags(['Low','Medium','High'],t.complexity)}</select></label>
       <label>%<input type="number" min="0" max="100" value="${t.progress}" data-edit="progress" data-tid="${t.id}" class="prog-in"></label>
-      <button class="ctask-del" data-del-task="${t.id}" title="刪除此任務">🗑</button>
+      <button class="ctask-del" data-del-task="${t.id}" title="Delete this task">🗑</button>
     </div>
   </div>`;
 }
@@ -1541,19 +1541,19 @@ function cloudDeleteImage(imgId){                       // also remove from the 
 }
 function clearTaskImages(tid){
   const t=tasks.find(x=>x.id===tid); if(!t||!(t.images||[]).length) return;
-  if(!confirm('清除這個任務的全部 '+t.images.length+' 張圖片？')) return;
+  if(!confirm('Clear all '+t.images.length+' images on this task?')) return;
   (t.images||[]).forEach(im=>cloudDeleteImage(im.id));
   t.images=[];
   persist(); renderMembersArea(); if(_openTaskId===tid && !$('#taskModal').hidden) openTask(tid);
-  toast('已清除全部圖片');
+  toast('All images cleared');
 }
 function removeTaskImage(tid, imgId){
   const t=tasks.find(x=>x.id===tid); if(!t||!t.images) return;
-  if(!confirm('確定刪除這張圖片？刪除後無法復原。')) return;   // 二次確認，避免誤刪
+  if(!confirm('Delete this image? This cannot be undone.')) return;   // confirm to avoid accidental deletion
   t.images=t.images.filter(im=>im.id!==imgId);
   cloudDeleteImage(imgId);
   persist(); renderMembersArea(); if(_openTaskId===tid && !$('#taskModal').hidden) openTask(tid);
-  toast('已移除圖片');
+  toast('Image removed');
 }
 async function addTaskImages(tid, fileList){
   const t=tasks.find(x=>x.id===tid); if(!t) return;
@@ -1561,7 +1561,7 @@ async function addTaskImages(tid, fileList){
   t.images=t.images||[];
   for(const f of files){ const url=await fileToDataURL(f); const s=await shrinkImageBudget(url, 2200); t.images.push({id:uid(), data:s.data, w:s.w, h:s.h}); }
   persist(); renderMembersArea(); if(_openTaskId===tid && !$('#taskModal').hidden) openTask(tid);
-  toast('已新增 '+files.length+' 張圖片');
+  toast('Added '+files.length+' image(s)');
 }
 function addTaskOwner(id, mid){
   const t=tasks.find(x=>x.id===id); if(!t||!mid) return;
@@ -1585,10 +1585,10 @@ function renderCharts(){
   if(unassigned.length) wl.push({id:'__un__', name:'Unassigned', c:unassigned.length});
   const active=members.filter(m=>map.get(m.id).length>0).length;
   const maxW=Math.max(1,...wl.map(x=>x.c));
-  $('#wlChartSub').textContent = `${active}/${members.length} 位有任務 · 點名字看其任務`;
+  $('#wlChartSub').textContent = `${active}/${members.length} with tasks · click a name to see theirs`;
   $('#workloadChart').innerHTML = wl.length
-    ? wl.map(x=>progBar(x.name+(x.c===0?'（待輸入）':''), Math.round(x.c/maxW*100), x.c, 'wl', {mem:x.id})).join('')
-    : '<p class="hint">尚無資料</p>';
+    ? wl.map(x=>progBar(x.name+(x.c===0?' (pending)':''), Math.round(x.c/maxW*100), x.c, 'wl', {mem:x.id})).join('')
+    : '<p class="hint">No data</p>';
 }
 // one chart row. cls 'wl' = workload (purple); else colored by progress. opts.proj/opts.mem make it clickable.
 function progBar(label, pct, valText, cls, opts){
@@ -1631,20 +1631,20 @@ function renderMembersArea(){
   }
 
   $('#membersArea').innerHTML = html ||
-    '<div class="panel"><p class="hint">沒有符合條件的項目（或尚未加入成員 / 匯入週報）。</p></div>';
-  const fc=$('#filterCount'); if(fc) fc.textContent='顯示 '+shown.size+' 筆任務';
+    '<div class="panel"><p class="hint">No matching items (or no members added / reports imported yet).</p></div>';
+  const fc=$('#filterCount'); if(fc) fc.textContent='Showing '+shown.size+' tasks';
 }
 function memberBlock(name, list, isUnassigned, mid){
   const avg=list.length?Math.round(list.reduce((s,t)=>s+(+t.progress||0),0)/list.length):0;
   // aggregate this member's detail/analysis images into a header strip (easy to find, not buried in one card)
   const imgs=[]; const seen=new Set();
   list.forEach(t=>(t.images||[]).forEach(im=>{ if(im&&im.id&&!seen.has(im.id)){ seen.add(im.id); imgs.push(im); } }));
-  const strip = imgs.length? `<div class="member-imgs" title="本成員的圖片/分析">📎 ${imgs.slice(0,10).map(im=>`<img src="${im.data}" data-light="${im.id}">`).join('')}${imgs.length>10?`<span class="more">+${imgs.length-10}</span>`:''}</div>` : '';
+  const strip = imgs.length? `<div class="member-imgs" title="This member's images / analysis">📎 ${imgs.slice(0,10).map(im=>`<img src="${im.data}" data-light="${im.id}">`).join('')}${imgs.length>10?`<span class="more">+${imgs.length-10}</span>`:''}</div>` : '';
   const head=`<div class="member-head ${isUnassigned?'unassigned':''}">
     ${mid?memberRoleBadges(mid):''}<span class="name">${esc(name)}</span>
-    <span class="meta">${list.length} 任務 · 平均 ${avg}%</span>
+    <span class="meta">${list.length} tasks · avg ${avg}%</span>
     ${list.length?'':'<span class="pending">Pending input</span>'}
-    ${mid?`<button class="btn sm add-task-btn" data-addtask="${mid}">＋ 新增任務</button>`:''}</div>${strip}`;
+    ${mid?`<button class="btn sm add-task-btn" data-addtask="${mid}">＋ Add task</button>`:''}</div>${strip}`;
   const cards=list.length? `<div class="task-grid">${list.map(taskCard).join('')}</div>` : '';
   return `<div class="member-block" id="mblock-${mid||'unassigned'}">${head}${cards}</div>`;
 }
@@ -1657,7 +1657,7 @@ function jumpToMember(mid){
   renderFilters(); renderMembersArea(); renderStats();
   let block=document.getElementById('mblock-'+mid);
   if(!block){ filters.role=''; filters.status=''; filters.q=''; const fq=$('#filterQ'); if(fq) fq.value=''; renderFilters(); renderMembersArea(); block=document.getElementById('mblock-'+mid); }
-  if(!block){ toast('找不到該成員的週報'); return; }
+  if(!block){ toast('No report found for that member'); return; }
   requestAnimationFrame(()=>{
     const mn=document.querySelector('.main');
     const desktop = mn && getComputedStyle(mn).overflowY!=='visible' && mn.scrollHeight>mn.clientHeight+4;
@@ -1679,22 +1679,22 @@ function progBar(val, closed){
 function weekRows(t){
   const closed=isClosed(t), hasCur=!!(t.current||'').trim(), hasNext=!!(t.next||'').trim();
   let h='';
-  if(hasCur){ h+=`<div class="wk-row"><span class="wk-tag now">本週</span><span class="wk-desc">${esc(t.current)}</span></div>`+progBar(t.progress,closed); }
+  if(hasCur){ h+=`<div class="wk-row"><span class="wk-tag now">This week</span><span class="wk-desc">${esc(t.current)}</span></div>`+progBar(t.progress,closed); }
   if(hasNext){
     const np=(t.nextProgress!=null)?t.nextProgress:(hasCur?0:(t.progress||0));
-    h+=`<div class="wk-row"><span class="wk-tag nxt">下週</span><span class="wk-desc">${esc(t.next)}</span></div>`+progBar(np,false);
+    h+=`<div class="wk-row"><span class="wk-tag nxt">Next week</span><span class="wk-desc">${esc(t.next)}</span></div>`+progBar(np,false);
   }
-  if(!hasCur && !hasNext){ h+=`<div class="wk-row"><span class="wk-desc">(無描述)</span></div>`+progBar(t.progress,closed); }
+  if(!hasCur && !hasNext){ h+=`<div class="wk-row"><span class="wk-desc">(no description)</span></div>`+progBar(t.progress,closed); }
   return h;
 }
 function taskCard(t){
   const sharedTag=t.shared?`<span class="tag shared">Shared owner</span>`:'';
-  const thumbs=(t.images&&t.images.length)?`<div class="img-badge" title="${t.images.length} 張圖（見成員上方）">📎 ${t.images.length}</div>`:'';
-  const delta=t.delta?`<div class="delta">⟳ Weekly delta：${esc(t.delta)}</div>`:'';
+  const thumbs=(t.images&&t.images.length)?`<div class="img-badge" title="${t.images.length} image(s) (see top of member)">📎 ${t.images.length}</div>`:'';
+  const delta=t.delta?`<div class="delta">⟳ Weekly delta:${esc(t.delta)}</div>`:'';
   const closed=isClosed(t);
   const shortP=t.projectLabel || String(t.project||'').split(/[\n(]/)[0].trim();
   return `<div class="card ${closed?'closed':''}" data-task="${t.id}">
-    <button class="card-del" data-del-task="${t.id}" title="刪除任務">🗑</button>
+    <button class="card-del" data-del-task="${t.id}" title="Delete task">🗑</button>
     <div class="ct"><span class="proj">${esc(shortP)}</span></div>
     <div class="tags">
       ${closed?'<span class="tag closed">✓ Closed</span>':''}
@@ -1720,48 +1720,48 @@ function openTask(id){
     <div class="modal-head"><h2>${esc(t.projectLabel||t.project)}</h2><button class="icon-btn" data-close>✕</button></div>
     <div class="modal-body detail">
       <div class="tags">
-        ${isClosed(t)?'<span class="tag closed">✓ Closed 已完成</span>':''}
+        ${isClosed(t)?'<span class="tag closed">✓ Closed</span>':''}
         <span class="tag risk-${t.risk}">Risk ${esc(t.risk)}</span>
         <span class="tag cx">Complexity ${esc(t.complexity)}</span>
         ${t.shared?'<span class="tag shared">Shared owner</span>':''}
         <span class="tag st-${t.status}">${esc(t.status)}</span>
       </div>
       <div class="edit-row">
-        <label>本週進度 %<input type="number" min="0" max="100" value="${t.progress}" data-edit="progress" data-tid="${t.id}" class="prog-in"></label>
-        <label>下週進度 %<input type="number" min="0" max="100" value="${t.nextProgress!=null?t.nextProgress:''}" data-edit="nextProgress" data-tid="${t.id}" class="prog-in" placeholder="—"></label>
+        <label>This week %<input type="number" min="0" max="100" value="${t.progress}" data-edit="progress" data-tid="${t.id}" class="prog-in"></label>
+        <label>Next week %<input type="number" min="0" max="100" value="${t.nextProgress!=null?t.nextProgress:''}" data-edit="nextProgress" data-tid="${t.id}" class="prog-in" placeholder="—"></label>
         <label>Risk<select data-edit="risk" data-tid="${t.id}">${optTags(['Low','Medium','High'],t.risk)}</select></label>
-        <label>複雜度<select data-edit="complexity" data-tid="${t.id}">${optTags(['Low','Medium','High'],t.complexity)}</select></label>
+        <label>Complexity<select data-edit="complexity" data-tid="${t.id}">${optTags(['Low','Medium','High'],t.complexity)}</select></label>
       </div>
       <div class="kv">
-        <span class="k">Project (可改)</span><span><input class="proj-edit" value="${esc(t.project)}" data-edit="project" data-tid="${t.id}"></span>
+        <span class="k">Project (editable)</span><span><input class="proj-edit" value="${esc(t.project)}" data-edit="project" data-tid="${t.id}"></span>
         <span class="k">Status</span><span>${esc(statusLine(t))}</span>
         <span class="k">Due date</span><span>${esc(t.due||'—')}</span>
-        <span class="k">原始 Owner (raw)</span><span>${esc(t.rawOwner||'—')}</span>
+        <span class="k">Owner (raw)</span><span>${esc(t.rawOwner||'—')}</span>
         <span class="k">Reporter</span><span>${esc(t.reporter||'—')}</span>
-        <span class="k">分派後成員</span><span>${esc(owners)}</span>
-        ${t.unmatched&&t.unmatched.length?`<span class="k">未對應</span><span style="color:var(--warn)">${esc(t.unmatched.join(', '))}</span>`:''}
-        <span class="k">來源</span><span>${esc(t.source||'手動')}</span>
+        <span class="k">Assigned members</span><span>${esc(owners)}</span>
+        ${t.unmatched&&t.unmatched.length?`<span class="k">Unmatched</span><span style="color:var(--warn)">${esc(t.unmatched.join(', '))}</span>`:''}
+        <span class="k">Source</span><span>${esc(t.source||'manual')}</span>
       </div>
-      <div class="section-title">This week（可編輯）</div>
-      <textarea class="task-edit" data-edit="current" data-tid="${t.id}" rows="3" placeholder="本週工作內容">${esc(t.current||'')}</textarea>
-      <div class="section-title">Next week（可編輯）</div>
-      <textarea class="task-edit" data-edit="next" data-tid="${t.id}" rows="2" placeholder="下週計畫">${esc(t.next||'')}</textarea>
+      <div class="section-title">This week (editable)</div>
+      <textarea class="task-edit" data-edit="current" data-tid="${t.id}" rows="3" placeholder="This week's work">${esc(t.current||'')}</textarea>
+      <div class="section-title">Next week (editable)</div>
+      <textarea class="task-edit" data-edit="next" data-tid="${t.id}" rows="2" placeholder="Next week plan">${esc(t.next||'')}</textarea>
       ${t.delta?`<div class="section-title">Weekly delta</div><div style="color:var(--warn)">${esc(t.delta)}</div>`:''}
-      ${t.prev?`<div class="section-title">前次描述</div><div class="hint">${esc(t.prev.current||'—')} (was ${t.prev.progress}%, risk ${t.prev.risk})</div>`:''}
-      <div class="section-title">Issue analysis（可編輯）</div>
-      <textarea class="task-edit analysis-edit" data-edit="analysis" data-tid="${t.id}" rows="3" placeholder="問題分析">${esc(t.analysis||generateAnalysis(t))}</textarea>
-      <div class="section-title">圖片 Attachments（可一張張刪、或一鍵全清，匯出與雲端會同步更新）
-        ${(t.images||[]).length?`<button class="btn xs danger clearimg-btn" data-clearimg="${t.id}">🗑 全部清除 (${t.images.length})</button>`:''}</div>
+      ${t.prev?`<div class="section-title">Previous</div><div class="hint">${esc(t.prev.current||'—')} (was ${t.prev.progress}%, risk ${t.prev.risk})</div>`:''}
+      <div class="section-title">Issue analysis (editable)</div>
+      <textarea class="task-edit analysis-edit" data-edit="analysis" data-tid="${t.id}" rows="3" placeholder="Issue analysis">${esc(t.analysis||generateAnalysis(t))}</textarea>
+      <div class="section-title">Attachments (delete one-by-one or clear all; exports and cloud stay in sync)
+        ${(t.images||[]).length?`<button class="btn xs danger clearimg-btn" data-clearimg="${t.id}">🗑 Clear all (${t.images.length})</button>`:''}</div>
       <div class="imgs editable">
-        ${(t.images||[]).map(im=>`<span class="img-edit"><img src="${im.data}" data-light="${im.id}"><button class="img-del" data-delimg="${t.id}|${im.id}" title="刪除這張圖">✕</button></span>`).join('')}
-        <label class="img-add" title="新增 / 更換圖片">＋ 圖片<input type="file" accept="image/*" multiple hidden data-addimg="${t.id}"></label>
+        ${(t.images||[]).map(im=>`<span class="img-edit"><img src="${im.data}" data-light="${im.id}"><button class="img-del" data-delimg="${t.id}|${im.id}" title="Delete this image">✕</button></span>`).join('')}
+        <label class="img-add" title="Add / replace images">＋ Image<input type="file" accept="image/*" multiple hidden data-addimg="${t.id}"></label>
       </div>
     </div>
     <div class="modal-foot">
-      <button class="btn danger" data-del-task="${t.id}">刪除任務</button>
-      ${(t.images&&t.images.length)?`<button class="btn" data-ocr="${t.id}">🔍 OCR 圖片文字</button>`:''}
-      <button class="btn primary" data-export-member="${(t.ownerIds||[])[0]||''}">匯出此成員 Word</button>
-      <button class="btn" data-close>關閉</button>
+      <button class="btn danger" data-del-task="${t.id}">Delete task</button>
+      ${(t.images&&t.images.length)?`<button class="btn" data-ocr="${t.id}">🔍 OCR image text</button>`:''}
+      <button class="btn primary" data-export-member="${(t.ownerIds||[])[0]||''}">Export this member to Word</button>
+      <button class="btn" data-close>Close</button>
     </div>`;
   $('#taskModal').hidden=false;
 }
@@ -1774,7 +1774,7 @@ function openProject(projk){
   const avg=list.length?Math.round(list.reduce((s,t)=>s+(+t.progress||0),0)/list.length):0;
   const closed=list.filter(isClosed).length;
   $('#taskModalInner').innerHTML=`
-    <div class="modal-head"><h2>${esc(label)} <span class="ch-sub">${list.length} 個任務 · 平均 ${avg}% · ${closed} 已結案</span></h2>
+    <div class="modal-head"><h2>${esc(label)} <span class="ch-sub">${list.length} tasks · avg ${avg}% · ${closed} closed</span></h2>
       <button class="icon-btn" data-close>✕</button></div>
     <div class="modal-body">
       <div class="proj-tasklist">${list.map(t=>`
@@ -1786,12 +1786,12 @@ function openProject(projk){
               <span class="tag st-${t.status}">${esc(t.status)}</span>
             </span>
           </div>
-          <div class="pt-desc">${esc((t.current||t.next||'(無描述)').slice(0,170))}</div>
+          <div class="pt-desc">${esc((t.current||t.next||'(no description)').slice(0,170))}</div>
           <div class="prog"><span class="ptrack"><span class="pfill ${progClass(t.progress)}" style="width:${t.progress}%"></span></span><span class="pval ${isClosed(t)?'done':''}">${t.progress}%</span></div>
         </div>`).join('')}
       </div>
     </div>
-    <div class="modal-foot"><button class="btn" data-close>關閉</button></div>`;
+    <div class="modal-foot"><button class="btn" data-close>Close</button></div>`;
   $('#taskModal').hidden=false;
 }
 
@@ -1800,9 +1800,9 @@ function parseAliasText(text){
   const out=[];
   text.split(/[\r\n]+/).forEach(line=>{ line=line.trim(); if(!line) return;
     let label, rest;
-    if(/[:：]/.test(line)){ const p=line.split(/[:：]/); label=p[0].trim(); rest=p.slice(1).join(':'); }
+    if(/[::]/.test(line)){ const p=line.split(/[::]/); label=p[0].trim(); rest=p.slice(1).join(':'); }
     else { label=line; rest=line; }
-    const tokens=[...new Set([label, ...rest.split(/[,，、\/]/)].map(s=>norm(s)).filter(Boolean))];
+    const tokens=[...new Set([label, ...rest.split(/[,, , \/]/)].map(s=>norm(s)).filter(Boolean))];
     if(label) out.push({key:norm(label), label, tokens});
   });
   return out;
@@ -1811,7 +1811,7 @@ function aliasToText(){ return projAliases.map(g=>g.label+': '+g.tokens.join(', 
 function applyProjAliases(text){
   projAliases=parseAliasText(text);
   tasks.forEach(t=>{ t.projk=projKeyOf(t.project); t.projectLabel=projLabelOf(t.project); }); // re-group existing
-  persist(); renderAll(); toast('已套用專案歸併（'+projAliases.length+' 組）');
+  persist(); renderAll(); toast('Project merge applied ('+projAliases.length+' groups)');
 }
 
 /* =====================================================================
@@ -1835,13 +1835,13 @@ function openWorkbench(preMemberId){
 }
 function renderWorkbenchSelect(){
   const sel=$('#wbMember'); if(!sel) return;
-  sel.innerHTML=members.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('')||'<option value="">(先加入成員)</option>';
+  sel.innerHTML=members.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('')||'<option value="">(add members first)</option>';
 }
 function renderWbThumbs(){
   $('#wbThumbs').innerHTML=wbImages.map((im,i)=>`<div class="th"><img src="${im.data}" data-light="${im.id}"><button class="rm" data-rm-wb="${i}">✕</button></div>`).join('');
 }
 function saveWorkbench(){
-  const mid=$('#wbMember').value; if(!mid){ toast('請先加入成員'); return; }
+  const mid=$('#wbMember').value; if(!mid){ toast('Add a member first'); return; }
   const project=$('#wbProject').value.trim()||'Untitled Project';
   const current=$('#wbThisWeek').value.trim();
   const name=memberName(mid);
@@ -1851,10 +1851,10 @@ function saveWorkbench(){
     nextProgress:+$('#wbNextProgress').value||0,
     _images:wbImages.slice()};
   if($('#wbIssue').value.trim()) p.current += (p.current?' ':'')+'Issue/Note: '+$('#wbIssue').value.trim();
-  overlayTasks([p], '工作台手動輸入');
+  overlayTasks([p], 'Workbench manual entry');
   renderAll();
   $('#workbenchModal').hidden=true;
-  toast('已儲存任務給 '+name);
+  toast('Task saved for '+name);
 }
 
 /* =====================================================================
@@ -1972,11 +1972,11 @@ function rptMarkerRuns(line){
 function rptEstLines(s){ return Math.max(1, Math.ceil(s.length/118)); }
 
 function assemblePptx(memberIds){
-  if(typeof PptxGenJS==='undefined'){ toast('PPTX 函式庫未載入'); return null; }
+  if(typeof PptxGenJS==='undefined'){ toast('PPTX library not loaded'); return null; }
   const {map,unassigned}=buildBuckets();
   const targets = memberIds&&memberIds.length
     ? members.filter(m=>memberIds.includes(m.id)) : members.slice();
-  if(!targets.length){ toast('沒有成員可匯出'); return null; }
+  if(!targets.length){ toast('No members to export'); return null; }
   const date=new Date().toISOString().slice(0,10);
 
   const pptx=new PptxGenJS();
@@ -2050,13 +2050,13 @@ function assemblePptx(memberIds){
     s.addShape(RR,{x,y,w,h,rectRadius:0.05,fill:{color:PPT.white},line:{color:PPT.line,width:1}});
     s.addShape(R,{x,y,w,h:0.06,fill:{color:PPT.cyan}});
     try{ s.addImage({data:im.data,x:x+0.15,y:y+0.2,w:w-0.3,h:h-0.55,sizing:{type:'contain',w:w-0.3,h:h-0.55}}); }catch(e){}
-    s.addText('圖 '+n,{x:x+0.15,y:y+h-0.32,w:w-0.3,h:0.26,fontSize:10,color:PPT.gray,fontFace:PPT.font});
+    s.addText('Fig '+n,{x:x+0.15,y:y+h-0.32,w:w-0.3,h:0.26,fontSize:10,color:PPT.gray,fontFace:PPT.font});
   }
   // member's images → ONE big image per slide
   function attachPages(name, role, imgs){
     imgs.forEach((im,i)=>{
-      const s=pptx.addSlide(); header(s,name,role,'附件 attachments');
-      sectionLabel(s,'ATTACHMENTS  ｜  Issue 圖片 / 量測',1.55);
+      const s=pptx.addSlide(); header(s,name,role,'Attachments');
+      sectionLabel(s,'ATTACHMENTS  ｜  Issue images / measurements',1.55);
       imgCard(s,0.9,1.98,11.53,4.9,im,i+1);
     });
   }
@@ -2069,7 +2069,7 @@ function assemblePptx(memberIds){
       const w={color:'FFFFFF'};
       rows.push([
         {text:'—', options:{color:PPT.gray,fontSize:TFONT,valign:'middle',fill:w}},
-        {text:(key==='next'?'（無下週計畫）':'（無本週工作）'), options:{italic:true,color:PPT.gray,fontSize:TFONT,valign:'middle',fill:w}},
+        {text:(key==='next'?'(no next week plan)':'(no this week work)'), options:{italic:true,color:PPT.gray,fontSize:TFONT,valign:'middle',fill:w}},
         {text:'—', options:{color:PPT.gray,fontSize:TFONT,align:'center',valign:'middle',fill:w}},
         {text:'—', options:{color:PPT.gray,fontSize:TFONT,align:'center',valign:'middle',fill:w}}
       ]);
@@ -2098,12 +2098,12 @@ function assemblePptx(memberIds){
       const s=pptx.addSlide(); header(s,name,role,'');
       s.addShape(RR,{x:3.0,y:2.95,w:7.33,h:1.5,rectRadius:0.1,fill:{color:PPT.tint},line:{color:PPT.line,width:1}});
       s.addText('Pending input',{x:3.0,y:3.12,w:7.33,h:0.5,fontSize:20,bold:true,color:PPT.navy,fontFace:PPT.font,align:'center'});
-      s.addText('本週尚未提供工作內容',{x:3.0,y:3.66,w:7.33,h:0.5,fontSize:13,color:PPT.gray,fontFace:PPT.font,align:'center'});
+      s.addText('No work provided for this week',{x:3.0,y:3.66,w:7.33,h:0.5,fontSize:13,color:PPT.gray,fontFace:PPT.font,align:'center'});
       return;
     }
     const HEAD_H=0.32, LBL=0.40, GAP=0.20;                  // compact spacing -> more fits per slide
     let s=null, y=0, started=false;
-    const newSlide=()=>{ s=pptx.addSlide(); header(s,name,role, started?'(續) cont.':''); started=true; y=1.5; };
+    const newSlide=()=>{ s=pptx.addSlide(); header(s,name,role, started?'(cont.)':''); started=true; y=1.5; };
     function section(label, rowsG, key){
       let recorded=false;
       const rec=()=>{ if(!recorded){ recorded=true; if(window.__pgdbg) window.__pgdbg.push({name, sec:/THIS/.test(label)?'this':'next', slide:pptx.slides.length}); } };
@@ -2130,8 +2130,8 @@ function assemblePptx(memberIds){
       }
     }
     newSlide();
-    section('THIS WEEK  ｜  本週工作', thisRows, 'cur');
-    section('NEXT WEEK  ｜  下週計畫', nextRows, 'next');
+    section('THIS WEEK  ｜  This week', thisRows, 'cur');
+    section('NEXT WEEK  ｜  Next week plan', nextRows, 'next');
     attachPages(name,role,imgs);
   }
 
@@ -2148,7 +2148,7 @@ async function buildPptx(memberIds){
   const r=assemblePptx(memberIds); if(!r) return;
   try{ await r.pptx.writeFile({fileName:r.fname}); }
   catch(e){ const blob=await r.pptx.write({outputType:'blob'}); downloadBlob(blob,r.fname); }
-  toast('已匯出 '+r.fname);
+  toast('Exported '+r.fname);
 }
 
 async function exportWord(memberIds){
@@ -2156,7 +2156,7 @@ async function exportWord(memberIds){
   const targets = memberIds && memberIds.length
     ? members.filter(m=>memberIds.includes(m.id))
     : members.slice();
-  if(!targets.length){ toast('沒有成員可匯出'); return; }
+  if(!targets.length){ toast('No members to export'); return; }
 
   // media collector: dedupe images, assign rIds
   const media=[]; const relParts=[]; const seen=new Map();
@@ -2208,7 +2208,7 @@ async function exportWord(memberIds){
   const fname = (memberIds&&memberIds.length===1? memberName(memberIds[0]) : 'AllMembers')+
     '_WeeklyReport_'+new Date().toISOString().slice(0,10)+'.docx';
   downloadBlob(blob, fname);
-  toast('已匯出 '+fname);
+  toast('Exported '+fname);
   return blob;
 }
 function downloadBlob(blob, name){
@@ -2227,7 +2227,7 @@ function ensureTesseract(){
     const s=document.createElement('script');
     s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
     s.onload=()=>res(window.Tesseract);
-    s.onerror=()=>{ _tessPromise=null; rej(new Error('無法載入 OCR 函式庫（OCR 首次使用需要網路連線）')); };
+    s.onerror=()=>{ _tessPromise=null; rej(new Error('Could not load the OCR library (first OCR use needs an internet connection)')); };
     document.head.appendChild(s);
   });
   return _tessPromise;
@@ -2321,15 +2321,15 @@ function fixCode(s){
 // Used to make sure SOMEONE ELSE's report (a report screenshot pasted after a member's own table)
 // is never silently dumped onto the preceding member as if it were their detail image.
 function looksLikeReportText(text){
-  if(/report[a-z]{0,3}r\s*[:;：]/i.test(text)) return true;           // "Reporter:" even mis-OCR'd as "Reportar:"
-  if(/報告人\s*[:：]/.test(text)) return true;
+  if(/report[a-z]{0,3}r\s*[:;:]/i.test(text)) return true;           // "Reporter:" even mis-OCR'd as "Reportar:"
+  if(/報告人\s*[::]/.test(text)) return true;
   if(/project\s*name/i.test(text) && /(current\s*job|due\s*date|next\s*week)/i.test(text)) return true;
   const codes=text.match(new RegExp(OCR_CODE_RE.source,'ig'))||[];
   return codes.length>=2;                                            // 2+ project codes = a project table
 }
 function ocrReportToTasks(text){
   // fuzzy "Reporter:" — OCR turns it into Reportar/Reporler/Repoter etc. Snap the captured name to a real member.
-  const rm=text.match(/report[a-z]{0,3}r\s*[:;：]?\s*([A-Za-z][A-Za-z.]+)/i) || text.match(/報告人\s*[:：]?\s*([A-Za-z一-鿿]+)/);
+  const rm=text.match(/report[a-z]{0,3}r\s*[:;:]?\s*([A-Za-z][A-Za-z.]+)/i) || text.match(/報告人\s*[::]?\s*([A-Za-z一-鿿]+)/);
   if(!rm) return [];                       // not a personal weekly report -> skip
   const reporter=snapName(rm[1]);          // snap a garbled OCR name to the nearest real member
   const lines=text.split('\n').map(l=>l.replace(/\s+/g,' ').trim()).filter(l=>l.length>2);
@@ -2389,29 +2389,29 @@ function convertOcrRows(rows, images){
 }
 async function ocrTask(id){
   const t=tasks.find(x=>x.id===id);
-  if(!t || !t.images || !t.images.length){ toast('此任務沒有附圖可辨識'); return; }
-  toast('OCR 啟動中…首次需下載辨識模型，請稍候');
+  if(!t || !t.images || !t.images.length){ toast('This task has no images to recognise'); return; }
+  toast('Starting OCR… the model downloads on first use, please wait');
   try{
-    const text=await ocrImages(t.images, (i,n)=>toast(`OCR 辨識中… ${i}/${n}`));
-    if(!text){ toast('沒有辨識到文字'); return; }
+    const text=await ocrImages(t.images, (i,n)=>toast(`OCR… ${i}/${n}`));
+    if(!text){ toast('No text recognised'); return; }
     if(t.imageReport){
       const rows=ocrReportToTasks(text);
       if(rows.length){
         const parsed=convertOcrRows(rows, t.images);
         tasks=tasks.filter(x=>x.id!==id);
-        overlayTasks(parsed, '圖片報告 OCR');
+        overlayTasks(parsed, 'Image report OCR');
         if(autoAdd) autoAddFromReport();
         persist(); renderAll(); $('#taskModal').hidden=true;
-        toast('✅ 圖片報告辨識完成，拆出 '+parsed.length+' 筆任務');
+        toast('✅ Image report recognised — extracted '+parsed.length+' tasks');
         return;
       }
-      t.current=text; t.imageReport=false; t.project='OCR 報告'; t.projectLabel='OCR 報告';
+      t.current=text; t.imageReport=false; t.project='OCR report'; t.projectLabel='OCR report';
     } else {
       t.current=(t.current? t.current+' ; ' : '')+'[OCR] '+text;
     }
     t.ocrDone=true; persist(); renderAll(); openTask(id);
-    toast('✅ OCR 完成');
-  }catch(e){ toast(e.message||'OCR 失敗'); }
+    toast('✅ OCR done');
+  }catch(e){ toast(e.message||'OCR failed'); }
 }
 let _ocrRunning=false;
 async function downscaleImgs(imgs){    // shrink hi-res OCR images to storage-light thumbnails before attaching
@@ -2421,11 +2421,11 @@ async function downscaleImgs(imgs){    // shrink hi-res OCR images to storage-li
 async function ocrAllReports(silent){
   if(_ocrRunning) return;
   const reps=pendingReports.slice().sort((a,b)=>(a._slide||0)-(b._slide||0));   // process in slide order
-  if(!reps.length){ if(!silent) toast('沒有待辨識的圖片頁'); return; }
+  if(!reps.length){ if(!silent) toast('No image pages to recognise'); return; }
   _ocrRunning=true;
   let made=0, kept=0, errs=0, lastReportTasks=null, lastReportSlide=-99;
   for(let i=0;i<reps.length;i++){
-    const t=reps[i]; const slide=t._slide||0; toast(`🔍 OCR 圖片頁 ${i+1}/${reps.length}…（背景進行，可繼續操作）`);
+    const t=reps[i]; const slide=t._slide||0; toast(`🔍 OCR image page ${i+1}/${reps.length}… (running in background, you can keep working)`);
     try{
       const text=await ocrImages(t._images||t.images, ()=>{});
       const rows=ocrReportToTasks(text);
@@ -2434,7 +2434,7 @@ async function ocrAllReports(silent){
         const parsed=convertOcrRows(rows, null);
         const small=await downscaleImgs(t._images||t.images);
         if(parsed[0]) parsed[0]._images=small;            // keep the report screenshot on the first task
-        const created=overlayTasks(parsed,'圖片報告 OCR');
+        const created=overlayTasks(parsed,'Image report OCR');
         made+=parsed.length; kept++;
         lastReportTasks=created; lastReportSlide=slide;
       } else if(looksLikeReportText(text)){
@@ -2465,21 +2465,21 @@ async function ocrAllReports(silent){
   if(autoAdd) autoAddFromReport();
   const dropped=dedupeTasks(); cleanupGarbledMembers();
   _ocrRunning=false; persist(); renderAll();
-  toast(`✅ 圖片頁辨識完成：${kept} 張報告 → ${made} 筆任務${dropped?`（去重 ${dropped}）`:''}`);
+  toast(`✅ Image pages recognised: ${kept} reports → ${made} tasks${dropped?` (deduped ${dropped})`:''}`);
 }
 function updateOcrBtn(){
   const n=pendingReports.length;
-  const b=$('#ocrReportsBtn'); if(b) b.textContent='🔍 OCR 圖片報告'+(n?` (${n})`:'');
+  const b=$('#ocrReportsBtn'); if(b) b.textContent='🔍 OCR image reports'+(n?` (${n})`:'');
 }
 async function ocrToWorkbench(){
-  if(!wbImages.length){ toast('請先上傳圖片'); return; }
-  toast('OCR 啟動中…首次需下載辨識模型，請稍候');
+  if(!wbImages.length){ toast('Upload an image first'); return; }
+  toast('Starting OCR… the model downloads on first use, please wait');
   try{
-    const text=await ocrImages(wbImages, (i,n)=>toast(`OCR 辨識中… ${i}/${n}`));
-    if(!text){ toast('沒有辨識到文字'); return; }
+    const text=await ocrImages(wbImages, (i,n)=>toast(`OCR… ${i}/${n}`));
+    if(!text){ toast('No text recognised'); return; }
     const ta=$('#wbThisWeek'); ta.value=(ta.value? ta.value+'\n':'')+text;
-    toast('✅ OCR 完成，已填入 This week');
-  }catch(e){ toast(e.message||'OCR 失敗'); }
+    toast('✅ OCR done — filled into This week');
+  }catch(e){ toast(e.message||'OCR failed'); }
 }
 
 /* =====================================================================
@@ -2489,19 +2489,19 @@ function fileToDataURL(f){ return new Promise(res=>{ const r=new FileReader(); r
 
 function wireEvents(){
   $('#reportInput').addEventListener('change', e=>{ if(e.target.files.length) importFiles(e.target.files); e.target.value=''; });
-  $('#addMembersBtn').addEventListener('click', ()=>{ const t=$('#memberPaste').value; if(t.trim()){ addMembers(parseMemberText(t),{manual:true}); $('#memberPaste').value=''; toast('已更新成員名單'); } });
-  $('#memberFileInput').addEventListener('change', async e=>{ const f=e.target.files[0]; if(f){ addMembers(parseMemberText(await f.text()),{manual:true}); toast('已從檔案加入成員'); } e.target.value=''; });
+  $('#addMembersBtn').addEventListener('click', ()=>{ const t=$('#memberPaste').value; if(t.trim()){ addMembers(parseMemberText(t),{manual:true}); $('#memberPaste').value=''; toast('Member list updated'); } });
+  $('#memberFileInput').addEventListener('change', async e=>{ const f=e.target.files[0]; if(f){ addMembers(parseMemberText(await f.text()),{manual:true}); toast('Members added from file'); } e.target.value=''; });
   $('#clearMembersBtn').addEventListener('click', clearMembers);
   $('#resetTasksBtn').addEventListener('click', resetTasks);
   { const cb=$('#clearAllBtn'); if(cb) cb.addEventListener('click', clearAllContent); }
-  $('#loadFromReportBtn').addEventListener('click', ()=>{ if(!tasks.length){ toast('請先匯入週報'); return; } const a=autoAddFromReport(); toast(a.length?('已補齊 '+a.length+' 位成員'):'報告中的負責人都已在名單'); });
+  $('#loadFromReportBtn').addEventListener('click', ()=>{ if(!tasks.length){ toast('Import reports first'); return; } const a=autoAddFromReport(); toast(a.length?('Added '+a.length+' members from reports'):'All report owners are already in the list'); });
   $('#groupSelect').addEventListener('change', e=>switchGroup(e.target.value));
   $('#saveGroupBtn').addEventListener('click', saveGroup);
   $('#newGroupBtn').addEventListener('click', createGroup);
   $('#renameGroupBtn').addEventListener('click', renameGroup);
   $('#delGroupBtn').addEventListener('click', deleteGroup);
   $('#autoAddChk').addEventListener('change', e=>{ autoAdd=e.target.checked; store.save('wrt_autoadd',autoAdd); });
-  $('#fuzzyChk').addEventListener('change', e=>{ fuzzy=e.target.checked; store.save('wrt_fuzzy',fuzzy); reresolveAllTasks(); persist(); renderAll(); toast(fuzzy?'已開啟模糊比對':'已切回完整姓名比對'); });
+  $('#fuzzyChk').addEventListener('change', e=>{ fuzzy=e.target.checked; store.save('wrt_fuzzy',fuzzy); reresolveAllTasks(); persist(); renderAll(); toast(fuzzy?'Fuzzy matching on':'Back to exact-name matching'); });
   // filter controls
   $('#filterQ').addEventListener('input', e=>{ filters.q=e.target.value; renderMembersArea(); });
   $('#filterProject').addEventListener('change', e=>{ filters.project=e.target.value; renderMembersArea(); });
@@ -2515,7 +2515,7 @@ function wireEvents(){
   $('#ocrReportsBtn').addEventListener('click', ocrAllReports);
   $('#previewBtn').addEventListener('click', openNarrative);
   $('#narrMember').addEventListener('change', renderNarrative);
-  $('#narrCopyBtn').addEventListener('click', ()=>{ navigator.clipboard&&navigator.clipboard.writeText($('#narrativeText').textContent); toast('已複製 narrative 文字'); });
+  $('#narrCopyBtn').addEventListener('click', ()=>{ navigator.clipboard&&navigator.clipboard.writeText($('#narrativeText').textContent); toast('Narrative text copied'); });
   $('#narrExportBtn').addEventListener('click', ()=>{ const mid=$('#narrMember').value; exportWord(mid?[mid]:null); });
   $('#applyAliasBtn').addEventListener('click', ()=>applyProjAliases($('#aliasText').value));
   { const a=$('#addProjBtn'); if(a) a.addEventListener('click', addBlankProject); }
@@ -2540,7 +2540,7 @@ function wireEvents(){
     if(t.dataset.clearimg){ clearTaskImages(t.dataset.clearimg); return; }
     if(t.dataset.delimg){ const [tid,imgId]=t.dataset.delimg.split('|'); removeTaskImage(tid,imgId); return; }
     if(t.dataset.light){ openLight(t.getAttribute('src')); return; }
-    if(t.dataset.exportMember!==undefined){ if(t.dataset.exportMember) exportWord([t.dataset.exportMember]); else toast('此任務沒有對應成員'); return; }
+    if(t.dataset.exportMember!==undefined){ if(t.dataset.exportMember) exportWord([t.dataset.exportMember]); else toast('This task has no matching member'); return; }
     // ----- catalog editing -----
     if(t.dataset.editProj!==undefined){ editingProj = editingProj===t.dataset.editProj ? '' : t.dataset.editProj; renderCatalog(); return; }
     if(t.dataset.saveProj!==undefined){ saveProjMeta(t.dataset.saveProj, t.closest('.proj-card')); return; }
@@ -2557,8 +2557,8 @@ function wireEvents(){
     if(t.dataset.stemplate!==undefined){ applyDefaultTemplate(); return; }
     if(t.dataset.sppt!==undefined){ exportSchedulePPT(); return; }
     if(t.dataset.sxlsx!==undefined){ exportScheduleExcel(); return; }
-    if(t.dataset.addcat!==undefined){ const n=prompt('新增專案分類名稱：'); if(n) addCategory(n); return; }
-    if(t.dataset.renamecat!==undefined){ const n=prompt('將分類「'+t.dataset.renamecat+'」改名為：', t.dataset.renamecat); if(n) renameCategory(t.dataset.renamecat, n); return; }
+    if(t.dataset.addcat!==undefined){ const n=prompt('New project category name:'); if(n) addCategory(n); return; }
+    if(t.dataset.renamecat!==undefined){ const n=prompt('Rename category "'+t.dataset.renamecat+'" to:', t.dataset.renamecat); if(n) renameCategory(t.dataset.renamecat, n); return; }
     if(t.dataset.delcat!==undefined){ deleteCategory(t.dataset.delcat); return; }
     { const cf=t.closest('[data-catfilter]'); if(cf){ catFilter=cf.dataset.catfilter; renderCatalog(); return; } }
     if(t.dataset.rmowner!==undefined){ const [tid,mid]=t.dataset.rmowner.split('|'); removeTaskOwner(tid,mid); return; }
@@ -2639,7 +2639,7 @@ function wireMemberDrag(){
 }
 function openNarrative(){
   const sel=$('#narrMember');
-  sel.innerHTML='<option value="">全部成員 All members</option>'+members.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('');
+  sel.innerHTML='<option value="">All members</option>'+members.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('');
   renderNarrative();
   $('#narrativeModal').hidden=false;
 }
@@ -2671,7 +2671,7 @@ function projMetaNoImg(){ const o={}; Object.keys(projMeta).forEach(k=>{ const c
 let _cloudErrAt=0;
 function cloudErrToast(e){                              // surface cloud-sync failures (throttled) so uploads never fail silently
   if(e && /permission|insufficient/i.test(e.message||'')){ const now=Date.now(); if(now-_cloudErrAt>20000){ _cloudErrAt=now;
-    toast('⚠ 雲端同步失敗：請確認已登入，且 Firebase 規則為 allow read,write: if request.auth!=null'); } }
+    toast('⚠ Cloud sync failed: make sure you are signed in and the Firebase rule is allow read,write: if request.auth!=null'); } }
 }
 function cloudSave(){
   if(!CLOUD.on || !CLOUD.ready || CLOUD.applying) return;
@@ -2797,7 +2797,7 @@ async function cloudEnter(){                         // load once + subscribe to
 }
 function applyRoleUI(){
   document.body.classList.toggle('role-member', !!(CLOUD.me && !CLOUD.me.admin));
-  const who=$('#cloudWho'); if(who) who.textContent=CLOUD.me? ('👤 '+CLOUD.me.name+(CLOUD.me.admin?'（管理員）':'（成員）')) : '';
+  const who=$('#cloudWho'); if(who) who.textContent=CLOUD.me? ('👤 '+CLOUD.me.name+(CLOUD.me.admin?'(admin)':'(member)')) : '';
   const lo=$('#cloudLogout'); if(lo) lo.hidden=!CLOUD.me;
 }
 function cloudPickName(){
@@ -2808,7 +2808,7 @@ function cloudPickName(){
   }else{                                                // team passcode -> members only (NO admin names)
     names=members.map(m=>m.name).filter(n=>!isAdminName(n));
   }
-  sel.innerHTML=names.map(n=>`<option>${esc(n)}</option>`).join('')||'<option value="">（名單尚未建立）</option>';
+  sel.innerHTML=names.map(n=>`<option>${esc(n)}</option>`).join('')||'<option value="">(roster not set up)</option>';
 }
 function cloudFinishLogin(name){
   CLOUD.me={name, admin: CLOUD.authedAs==='admin'};     // role comes from WHICH account, not the name
@@ -2836,13 +2836,13 @@ async function cloudInit(){
 
   $('#cgEnter').addEventListener('click', async ()=>{
     const pass=$('#cgPass').value.trim(); const msg=$('#cgMsg');
-    if(!pass){ msg.textContent='請輸入通行碼'; return; }
-    msg.textContent='登入中…';
+    if(!pass){ msg.textContent='Enter the passcode'; return; }
+    msg.textContent='Signing in…';
     let role=null;
     try{ await firebase.auth().signInWithEmailAndPassword(CLOUD.memberEmail, pass); role='member'; }
     catch(e1){
       try{ await firebase.auth().signInWithEmailAndPassword(CLOUD.adminEmail, pass); role='admin'; }
-      catch(e2){ msg.textContent='通行碼錯誤'; return; }
+      catch(e2){ msg.textContent='Wrong passcode'; return; }
     }
     CLOUD.authedAs=role;
     msg.textContent='';
