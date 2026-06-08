@@ -74,14 +74,20 @@ function persistLocal(){
   try{ store.save('wrt_projmerge', projMerge); }catch(e){}
   try{ const ag=memberGroups.find(g=>g.name===activeGroup); if(ag) ag.members=members.slice();
        store.save('wrt_groups', memberGroups); store.save('wrt_active_group', activeGroup); }catch(e){}
-  try{ store.save(LS.tasks, tasks); }
-  catch(e){ console.warn('tasks persist failed', e);
+  // in cloud mode, images live in Firestore -> keep localStorage light (text only)
+  try{
+    const toSave = (typeof CLOUD!=='undefined' && CLOUD.on)
+      ? tasks.map(t=>{ const c=Object.assign({},t); delete c.images; return c; })
+      : tasks;
+    store.save(LS.tasks, toSave);
+  }catch(e){ console.warn('tasks persist failed', e);
     toast('⚠ 任務太多（多為圖片）超過瀏覽器儲存上限，名單已保留，任務本次未存。'); }
 }
 
-/* downscale an image dataURL to a JPEG (readable but storage-friendly). 1200px keeps
-   schematics / measurement tables legible; localStorage degrades gracefully if it overflows. */
-function shrinkImage(dataUrl, max=1200, q=0.82){
+/* downscale an image dataURL to a JPEG. 1600px keeps schematics / measurement tables
+   sharp. In cloud mode images live in Firestore (not localStorage), so size is fine;
+   on the offline desktop, localStorage degrades gracefully if it overflows. */
+function shrinkImage(dataUrl, max=1600, q=0.85){
   return new Promise(res=>{
     const img=new Image();
     img.onload=()=>{
@@ -1079,9 +1085,24 @@ function editTaskField(id, field, val){
   // don't re-render the modal for free-text edits (would steal focus mid-typing)
   if(!$('#taskModal').hidden && _openTaskId===id && !['project','current','next','analysis'].includes(field)) openTask(id);
 }
+function cloudDeleteImage(imgId){                       // also remove from the cloud images collection
+  if(imgId && typeof CLOUD!=='undefined' && CLOUD.on && CLOUD.db){
+    CLOUD.upImgs.delete(imgId);
+    CLOUD.db.collection('images').doc(imgId).delete().catch(e=>console.warn('image delete failed', e));
+  }
+}
+function clearTaskImages(tid){
+  const t=tasks.find(x=>x.id===tid); if(!t||!(t.images||[]).length) return;
+  if(!confirm('清除這個任務的全部 '+t.images.length+' 張圖片？')) return;
+  (t.images||[]).forEach(im=>cloudDeleteImage(im.id));
+  t.images=[];
+  persist(); renderMembersArea(); if(_openTaskId===tid && !$('#taskModal').hidden) openTask(tid);
+  toast('已清除全部圖片');
+}
 function removeTaskImage(tid, imgId){
   const t=tasks.find(x=>x.id===tid); if(!t||!t.images) return;
   t.images=t.images.filter(im=>im.id!==imgId);
+  cloudDeleteImage(imgId);
   persist(); renderMembersArea(); if(_openTaskId===tid && !$('#taskModal').hidden) openTask(tid);
   toast('已移除圖片');
 }
@@ -1279,7 +1300,8 @@ function openTask(id){
       ${t.prev?`<div class="section-title">前次描述</div><div class="hint">${esc(t.prev.current||'—')} (was ${t.prev.progress}%, risk ${t.prev.risk})</div>`:''}
       <div class="section-title">Issue analysis（可編輯）</div>
       <textarea class="task-edit analysis-edit" data-edit="analysis" data-tid="${t.id}" rows="3" placeholder="問題分析">${esc(t.analysis||generateAnalysis(t))}</textarea>
-      <div class="section-title">圖片 Attachments（可刪除／新增，匯出報告會跟著更新）</div>
+      <div class="section-title">圖片 Attachments（可一張張刪、或一鍵全清，匯出與雲端會同步更新）
+        ${(t.images||[]).length?`<button class="btn xs danger clearimg-btn" data-clearimg="${t.id}">🗑 全部清除 (${t.images.length})</button>`:''}</div>
       <div class="imgs editable">
         ${(t.images||[]).map(im=>`<span class="img-edit"><img src="${im.data}" data-light="${im.id}"><button class="img-del" data-delimg="${t.id}|${im.id}" title="刪除這張圖">✕</button></span>`).join('')}
         <label class="img-add" title="新增 / 更換圖片">＋ 圖片<input type="file" accept="image/*" multiple hidden data-addimg="${t.id}"></label>
@@ -2017,6 +2039,7 @@ function wireEvents(){
     if(t.dataset.delTask){ deleteTask(t.dataset.delTask); $('#taskModal').hidden=true; return; }
     if(t.dataset.rmWb!==undefined){ wbImages.splice(+t.dataset.rmWb,1); renderWbThumbs(); return; }
     if(t.dataset.phrase){ const ta=$('#wbThisWeek'); ta.value=(ta.value?ta.value+' ':'')+PHRASES[t.dataset.phrase]; return; }
+    if(t.dataset.clearimg){ clearTaskImages(t.dataset.clearimg); return; }
     if(t.dataset.delimg){ const [tid,imgId]=t.dataset.delimg.split('|'); removeTaskImage(tid,imgId); return; }
     if(t.dataset.light){ openLight(t.getAttribute('src')); return; }
     if(t.dataset.exportMember!==undefined){ if(t.dataset.exportMember) exportWord([t.dataset.exportMember]); else toast('此任務沒有對應成員'); return; }
@@ -2186,12 +2209,24 @@ async function cloudEnter(){                         // load once + subscribe to
     CLOUD.applying=true; cloudApplyDoc(snap.data()); CLOUD.applying=false;
     persistLocal(); renderAll();
   }, e=>console.warn('snapshot error', e));
-  // real-time images (e.g. a member uploads an Issue screenshot)
+  // real-time images: add when a member uploads, REMOVE when anyone deletes (cross-device)
   CLOUD.db.collection('images').onSnapshot(snap=>{
-    cloudLoadImagesInto(snap);
     CLOUD.applying=true;
-    tasks.forEach(t=>{ const m={}; (t.images||[]).forEach(im=>{ if(im&&im.id) m[im.id]=im; });
-      (CLOUD.imgsByTask[t.id]||[]).forEach(im=>m[im.id]=im); t.images=Object.values(m); });
+    snap.docChanges().forEach(ch=>{
+      const im=ch.doc.data(); if(!im||!im.id) return;
+      const t=tasks.find(x=>x.id===im.taskId);
+      if(ch.type==='removed'){
+        CLOUD.upImgs.delete(im.id);
+        if(CLOUD.imgsByTask[im.taskId]) CLOUD.imgsByTask[im.taskId]=CLOUD.imgsByTask[im.taskId].filter(x=>x.id!==im.id);
+        if(t&&t.images) t.images=t.images.filter(x=>x.id!==im.id);
+      } else {                                           // added / modified
+        CLOUD.upImgs.add(im.id);
+        const obj={id:im.id,data:im.data,w:im.w,h:im.h};
+        const arr=(CLOUD.imgsByTask[im.taskId]=CLOUD.imgsByTask[im.taskId]||[]);
+        const ai=arr.findIndex(x=>x.id===im.id); if(ai>=0) arr[ai]=obj; else arr.push(obj);
+        if(t){ t.images=t.images||[]; const ti=t.images.findIndex(x=>x.id===im.id); if(ti>=0) t.images[ti]=obj; else t.images.push(obj); }
+      }
+    });
     CLOUD.applying=false;
     persistLocal(); renderAll();
   }, e=>console.warn('image snapshot error', e));
