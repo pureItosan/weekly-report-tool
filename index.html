@@ -3,8 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>週報整合工具 · Weekly Report Hub</title>
-<link rel="stylesheet" href="styles.css?v=260609a">
+<link rel="stylesheet" href="styles.css?v=260609b">
 </head>
 <body>
 <!-- ===== CLOUD LOGIN GATE (online only) ===== -->
@@ -271,7 +274,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>window.FIREBASE_CONFIG={apiKey:"AIzaSyAOeJVOvYfWK3GPisZL9LQlsHovB8VE-yA",authDomain:"spd-weekly.firebaseapp.com",projectId:"spd-weekly",storageBucket:"spd-weekly.firebasestorage.app",messagingSenderId:"322676456894",appId:"1:322676456894:web:1504a8f476a9afecde0def"};</script>
-<!-- bump ?v= on every deploy so browsers (and members) always fetch the latest app.js, never a cached copy -->
-<script src="app.js?v=260609a"></script>
+<!-- always fetch a fresh app.js (unique ?t each load) so even a cached index.html never runs stale code -->
+<script id="app-loader">document.write('<scr'+'ipt src="app.js?t='+Date.now()+'"><\/scr'+'ipt>');</script>
 </body>
 </html>

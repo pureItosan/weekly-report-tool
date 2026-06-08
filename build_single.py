@@ -10,6 +10,9 @@ html=read('index.html')
 # strip cache-busting query strings (?v=...) so the inliner below matches the tags and the
 # bundle ends up fully self-contained (no external refs remain)
 html=re.sub(r'(href="styles\.css|src="app\.js)\?v=[^"]*"', r'\1"', html)
+# the online page loads app.js via a dynamic loader (cache-bust); for the single file, replace
+# that loader with a plain placeholder so the inliner below can drop the app code in its place.
+html=re.sub(r'<script id="app-loader">.*?</script>', '<script src="app.js"></script>', html, flags=re.DOTALL)
 css=read('styles.css')
 jszip=read('vendor/jszip.min.js')
 xlsx=read('vendor/xlsx.full.min.js')

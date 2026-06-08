@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>週報整合工具 · Weekly Report Hub</title>
 <style>
 :root{
@@ -797,7 +800,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>window.FIREBASE_CONFIG={apiKey:"AIzaSyAOeJVOvYfWK3GPisZL9LQlsHovB8VE-yA",authDomain:"spd-weekly.firebaseapp.com",projectId:"spd-weekly",storageBucket:"spd-weekly.firebasestorage.app",messagingSenderId:"322676456894",appId:"1:322676456894:web:1504a8f476a9afecde0def"};</script>
-<!-- bump ?v= on every deploy so browsers (and members) always fetch the latest app.js, never a cached copy -->
+<!-- always fetch a fresh app.js (unique ?t each load) so even a cached index.html never runs stale code -->
 <script>/* =====================================================================
    Weekly Report Hub — app.js
    Single-page tool: import reports, map owners, overlay batches, export Word.
