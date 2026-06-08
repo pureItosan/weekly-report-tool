@@ -52,7 +52,16 @@ if(!Array.isArray(memberGroups) || !memberGroups.length){
 if(!memberGroups.some(g=>g.name===activeGroup)) activeGroup = memberGroups[0].name;
 const filters = {q:'', project:'', member:'', status:'', role:'', hideEmpty:false};
 
-function persist(){
+/* CLOUD (Firebase) state — only active on the online site, never on file:// */
+const CLOUD = {
+  on:false, db:null, email:'team@spd-rd3.app',
+  admins:['vito','tom','greg','aaron','zach','john'],   // by name (lowercased)
+  me:null, ready:false, applying:false, saveTimer:null
+};
+function isAdminName(n){ return CLOUD.admins.includes(String(n||'').trim().toLowerCase()); }
+
+function persist(){ persistLocal(); cloudSave(); }
+function persistLocal(){
   // members + batches are tiny and must always survive; tasks may be large (images)
   try{ store.save(LS.members, members); }catch(e){ console.warn(e); }
   try{ store.save(LS.batches, batches); }catch(e){ console.warn(e); }
@@ -1337,6 +1346,12 @@ let wbImages=[];
 function openWorkbench(preMemberId){
   renderWorkbenchSelect();
   if(preMemberId && members.some(m=>m.id===preMemberId)) $('#wbMember').value=preMemberId;
+  // members can only file under their own name
+  const wbm=$('#wbMember');
+  if(CLOUD.me && !CLOUD.me.admin){
+    const me=members.find(x=>x.name.toLowerCase()===CLOUD.me.name.toLowerCase());
+    if(me){ wbm.value=me.id; } wbm.disabled=true;
+  } else { wbm.disabled=false; }
   $('#phraseRow').innerHTML=Object.keys(PHRASES).map(k=>`<button data-phrase="${esc(k)}">${esc(k)}</button>`).join('');
   wbImages=[]; renderWbThumbs();
   ['#wbProject','#wbThisWeek','#wbIssue','#wbNext'].forEach(s=>$(s).value='');
@@ -2100,7 +2115,120 @@ window.WRT={ get members(){return members;}, get tasks(){return tasks;}, get bat
   resetTasks:()=>{tasks=[];batches=[];persist();renderAll();},
   clearAll:()=>{members=[];tasks=[];batches=[];persist();renderAll();} };
 
+/* =====================================================================
+   CLOUD SYNC (Firebase) — team-passcode login + Firestore live sync.
+   Online only (file:// stays purely local). Text/state syncs; images are
+   kept locally for now (image sync = a later step). Loop-safe via the
+   `applying` flag + snapshot `hasPendingWrites`.
+   ===================================================================== */
+function cloudSave(){
+  if(!CLOUD.on || !CLOUD.ready || CLOUD.applying) return;
+  clearTimeout(CLOUD.saveTimer);
+  CLOUD.saveTimer=setTimeout(()=>{
+    const tasksLite=tasks.map(t=>{ const c=Object.assign({},t); delete c.images; c._imgN=(t.images||[]).length; return c; });
+    CLOUD.db.collection('workspace').doc('main').set({
+      members, groups:memberGroups, activeGroup, tasks:tasksLite, batches,
+      projAliases, projMeta, projMerge, idCodeMap, deletedNames, _ts:Date.now()
+    }).catch(e=>console.warn('cloud save failed', e));
+  }, 700);
+}
+function cloudApplyDoc(d){
+  if(!d) return;
+  if(Array.isArray(d.members)) members=d.members;
+  if(Array.isArray(d.groups)) memberGroups=d.groups;
+  if(d.activeGroup) activeGroup=d.activeGroup;
+  if(Array.isArray(d.batches)) batches=d.batches;
+  if(Array.isArray(d.tasks)){
+    const imgById={}; tasks.forEach(t=>{ if((t.images||[]).length) imgById[t.id]=t.images; });  // keep local images
+    tasks=d.tasks.map(t=>Object.assign({}, t, {images: imgById[t.id]||[]}));
+  }
+  if(Array.isArray(d.projAliases)) projAliases=d.projAliases;
+  if(d.projMeta) projMeta=d.projMeta;
+  if(d.projMerge) projMerge=d.projMerge;
+  if(d.idCodeMap) idCodeMap=d.idCodeMap;
+  if(Array.isArray(d.deletedNames)) deletedNames=d.deletedNames;
+}
+async function cloudEnter(){                         // load once + subscribe to live updates
+  const ref=CLOUD.db.collection('workspace').doc('main');
+  let existed=false;
+  try{ const snap=await ref.get(); if(snap.exists){ existed=true; CLOUD.applying=true; cloudApplyDoc(snap.data()); CLOUD.applying=false; persistLocal(); } }
+  catch(e){ console.warn('cloud load failed', e); }
+  ref.onSnapshot(snap=>{
+    if(!snap.exists || snap.metadata.hasPendingWrites) return;   // ignore our own writes
+    CLOUD.applying=true; cloudApplyDoc(snap.data()); CLOUD.applying=false;
+    persistLocal(); renderAll();
+  }, e=>console.warn('snapshot error', e));
+  CLOUD.ready=true;
+  renderAll();
+  if(!existed) cloudSave();                          // empty cloud -> seed from this device
+}
+function applyRoleUI(){
+  document.body.classList.toggle('role-member', !!(CLOUD.me && !CLOUD.me.admin));
+  const who=$('#cloudWho'); if(who) who.textContent=CLOUD.me? ('👤 '+CLOUD.me.name+(CLOUD.me.admin?'（管理員）':'（成員）')) : '';
+  const lo=$('#cloudLogout'); if(lo) lo.hidden=!CLOUD.me;
+}
+function cloudPickName(){
+  const sel=$('#cgName'); if(!sel) return;
+  const names=members.map(m=>m.name);
+  CLOUD.admins.forEach(a=>{ if(!names.some(n=>n.toLowerCase()===a)) names.push(a.charAt(0).toUpperCase()+a.slice(1)); });
+  sel.innerHTML=names.map(n=>`<option>${esc(n)}</option>`).join('');
+}
+function cloudFinishLogin(name){
+  CLOUD.me={name, admin:isAdminName(name)};
+  store.save('wrt_cloud_me', CLOUD.me);
+  if(!CLOUD.me.admin){                                  // member -> only their own work
+    const m=members.find(x=>x.name.toLowerCase()===String(name).toLowerCase());
+    if(m) filters.member=m.id;
+    setView('members');
+  }
+  applyRoleUI();
+  $('#cloudGate').hidden=true;
+  renderAll();
+}
+function showGate(step){
+  const g=$('#cloudGate'); if(!g) return; g.hidden=false;
+  $('#cgPassWrap').hidden = step==='who';
+  $('#cgWho').hidden = step!=='who';
+  if(step==='who'){ cloudPickName(); }
+}
+async function cloudInit(){
+  CLOUD.on = (location.protocol!=='file:') && typeof firebase!=='undefined' && !!window.FIREBASE_CONFIG;
+  if(!CLOUD.on) return;                               // local mode — app already booted normally
+  try{ firebase.initializeApp(window.FIREBASE_CONFIG); CLOUD.db=firebase.firestore(); }
+  catch(e){ console.warn('firebase init failed', e); CLOUD.on=false; return; }
+
+  $('#cgEnter').addEventListener('click', async ()=>{
+    const pass=$('#cgPass').value.trim(); const msg=$('#cgMsg');
+    if(!pass){ msg.textContent='請輸入通行碼'; return; }
+    msg.textContent='登入中…';
+    try{
+      await firebase.auth().signInWithEmailAndPassword(CLOUD.email, pass);
+      msg.textContent='';
+      await cloudEnter();
+      showGate('who');
+    }catch(e){
+      msg.textContent = /password|credential|invalid/i.test(e.code||e.message)? '通行碼錯誤' : ('登入失敗：'+(e.code||e.message));
+    }
+  });
+  $('#cgPass').addEventListener('keydown', e=>{ if(e.key==='Enter') $('#cgEnter').click(); });
+  $('#cgGo').addEventListener('click', ()=>{ cloudFinishLogin($('#cgName').value); });
+  const logoutBtn=$('#cloudLogout'); if(logoutBtn) logoutBtn.addEventListener('click', ()=>{ store.save('wrt_cloud_me',null); firebase.auth().signOut(); location.reload(); });
+
+  // already signed-in this browser? skip the passcode, go straight in
+  firebase.auth().onAuthStateChanged(async user=>{
+    if(user && !CLOUD.ready){
+      await cloudEnter();
+      const saved=store.load('wrt_cloud_me',null);
+      if(saved && saved.name){ CLOUD.me=saved; applyRoleUI(); $('#cloudGate').hidden=true; }
+      else showGate('who');
+    } else if(!user){
+      showGate('pass');
+    }
+  });
+}
+
 /* init */
 wireEvents();
 renderAll();
 setView(currentView);
+cloudInit();

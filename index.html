@@ -7,6 +7,24 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<!-- ===== CLOUD LOGIN GATE (online only) ===== -->
+<div class="cloud-gate" id="cloudGate" hidden>
+  <div class="cg-box">
+    <div class="cg-logo">📋</div>
+    <h2>週報整合工具</h2>
+    <div id="cgPassWrap">
+      <p class="cg-sub">請輸入團隊通行碼登入</p>
+      <input type="password" id="cgPass" placeholder="團隊通行碼" autocomplete="current-password">
+      <button class="btn primary cg-btn" id="cgEnter">登入</button>
+      <div class="cg-msg" id="cgMsg"></div>
+    </div>
+    <div id="cgWho" hidden>
+      <p class="cg-sub">請選擇你是哪一位</p>
+      <select id="cgName"></select>
+      <button class="btn primary cg-btn" id="cgGo">進入</button>
+    </div>
+  </div>
+</div>
 <header class="topbar">
   <div class="brand">
     <span class="logo">📋</span>
@@ -16,15 +34,17 @@
     </div>
   </div>
   <div class="top-actions">
-    <label class="btn primary">
+    <label class="btn primary admin-only">
       ⬆ 匯入週報檔
       <input type="file" id="reportInput" accept=".pptx,.docx,.xlsx,.txt,.csv" multiple hidden>
     </label>
     <button class="btn" id="openWorkbenchBtn">✍ 成員工作台</button>
-    <button class="btn" id="ocrReportsBtn">🔍 OCR 圖片報告</button>
+    <button class="btn admin-only" id="ocrReportsBtn">🔍 OCR 圖片報告</button>
     <button class="btn" id="previewBtn">👁 Word 預覽</button>
-    <button class="btn" id="exportAllBtn">⬇ 匯出 Word</button>
-    <button class="btn" id="exportPptxBtn">📊 匯出 PPTX</button>
+    <button class="btn admin-only" id="exportAllBtn">⬇ 匯出 Word</button>
+    <button class="btn admin-only" id="exportPptxBtn">📊 匯出 PPTX</button>
+    <span class="cloud-info" id="cloudWho"></span>
+    <button class="btn sm cloud-info" id="cloudLogout" hidden>登出</button>
   </div>
 </header>
 
@@ -73,10 +93,10 @@
 
   <!-- ============ MAIN ============ -->
   <main class="main">
-    <section class="stats" id="statsRow"></section>
-    <p class="nav-hint">↑ 點上方方塊切換檢視（專案／成員／已結案／高風險／工作量）</p>
+    <section class="stats admin-only" id="statsRow"></section>
+    <p class="nav-hint admin-only">↑ 點上方方塊切換檢視（專案／成員／已結案／高風險／工作量）</p>
 
-    <section class="panel catalog-panel">
+    <section class="panel catalog-panel admin-only">
       <div class="catalog-head">
         <div><p class="eyebrow">PORTFOLIO</p><h2 id="catalogTitle">專案總覽 · Project catalog &amp; task coverage</h2></div>
         <select id="catalogMember"></select>
@@ -84,14 +104,14 @@
       <div id="projectCatalog"></div>
     </section>
 
-    <section class="charts one">
+    <section class="charts one admin-only">
       <div class="panel chart-block">
         <h3>🧑‍💻 成員工作量 <span class="ch-sub" id="wlChartSub"></span></h3>
         <div id="workloadChart" class="chart-list"></div>
       </div>
     </section>
 
-    <section class="filterbar">
+    <section class="filterbar admin-only">
       <input id="filterQ" placeholder="🔍 搜尋專案 / 工作內容">
       <select id="filterProject"></select>
       <select id="filterMember"></select>
@@ -210,6 +230,11 @@
 <script src="vendor/jszip.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="vendor/pptxgen.bundle.js"></script>
+<!-- Firebase: cloud login + sync. Only used on the online site (disabled on file://). -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>window.FIREBASE_CONFIG={apiKey:"AIzaSyAOeJVOvYfWK3GPisZL9LQlsHovB8VE-yA",authDomain:"spd-weekly.firebaseapp.com",projectId:"spd-weekly",storageBucket:"spd-weekly.firebasestorage.app",messagingSenderId:"322676456894",appId:"1:322676456894:web:1504a8f476a9afecde0def"};</script>
 <script src="app.js"></script>
 </body>
 </html>
