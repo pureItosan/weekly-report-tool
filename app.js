@@ -54,8 +54,11 @@ const filters = {q:'', project:'', member:'', status:'', role:'', hideEmpty:fals
 
 /* CLOUD (Firebase) state — only active on the online site, never on file:// */
 const CLOUD = {
-  on:false, db:null, email:'team@spd-rd3.app',
-  admins:['vito','tom','greg','aaron','zach','john'],   // by name (lowercased)
+  on:false, db:null,
+  memberEmail:'team@spd-rd3-member.app',  // members log in with the team passcode -> member role
+  adminEmail :'team@spd-rd3-admin.app',   // admins log in with the admin passcode -> admin role
+  admins:['vito','tom','greg','aaron','zach','john'],   // admin names (lowercased)
+  authedAs:null,         // 'member' | 'admin' (which account authenticated)
   me:null, ready:false, applying:false, saveTimer:null,
   upImgs:new Set(),      // image ids already uploaded to cloud (avoid re-upload)
   imgsByTask:{}          // taskId -> [{id,data,w,h}] loaded from cloud
@@ -804,16 +807,31 @@ function statusWord(t){
   return 'In-progress';
 }
 
+// project "progress" = that project's share of the member's total tasks (sums to 100%).
+// groups by RESOLVED project key so merged projects (e.g. B01W046 == B01W046/ID506) count as one.
+// e.g. Tom: B01V038 1, ID535 1, ID515 1, ID506 2 (total 5) -> 20/20/20/40%
+function projShares(list){
+  const projkOf=t=>resolveProjk(t.projk||t.key)||(t.projectLabel||shortProj(t.project));
+  const cnt={}, order=[], labelOf={};
+  (list||[]).forEach(t=>{ const k=projkOf(t); if(!(k in cnt)){ cnt[k]=0; order.push(k); labelOf[k]=t.projectLabel||shortProj(t.project); } cnt[k]++; });
+  const total=(list||[]).length||1, pctK={};
+  order.forEach(k=>pctK[k]=Math.round(cnt[k]/total*100));
+  return {
+    list: order.map(k=>({label:labelOf[k], pct:pctK[k]})),
+    share: t=>pctK[projkOf(t)]||0
+  };
+}
 /* ---------- Weekly narrative (plain text, used by preview + mirrors Word export) ---------- */
 function memberNarrative(name, list){
   const lbl=t=>t.projectLabel||shortProj(t.project);
   let out='*'+name+'\n';
   const cur=list.filter(t=>t.current), nexts=list.filter(t=>t.next);
   if(!cur.length && !nexts.length) return out+'Pending input — no items reported this week.\n\n';
-  out+='This week: [ '+(cur.length?cur.map(t=>`${lbl(t)} - ${t.progress}%`).join(' | '):'—')+' ]\n';
+  const sh=projShares(list);
+  out+='Project share (by task count): [ '+sh.list.map(o=>`${o.label} - ${o.pct}%`).join(' | ')+' ]\n';
   cur.forEach((t,i)=>{
     out+=`${i+1}. ${lbl(t)}: ${rewriteProfessional(t.current)}\n`;
-    out+=`   Status: ${statusWord(t)} | ${t.progress}% complete | risk ${(t.risk||'M')[0]} | complexity ${t.complexity||'Medium'}\n`;
+    out+=`   Status: ${statusWord(t)} | project share ${sh.share(t)}% | risk ${(t.risk||'M')[0]} | complexity ${t.complexity||'Medium'}\n`;
     if(t.shared) out+=`   Shared owner: ${(t.ownerIds||[]).map(memberName).join(', ')}\n`;
     if(t.images&&t.images.length) out+=`   Attachments: ${t.images.length} image(s)\n`;
   });
@@ -1448,12 +1466,13 @@ function memberReportXml(name, list, mediaCollector){
   if(!list.length){ body+=P('Pending input — no items reported this week.',{color:'B5790F'}); body+=P('',{}); return body; }
   const plabel=t=>t.projectLabel||shortProj(t.project);
   const cur=list.filter(t=>t.current);
-  // This week summary:  [ P1 - x% | P2 - y% | P3 - z% ]
-  const summary='[ '+(cur.length?cur.map(t=>`${plabel(t)} - ${t.progress}%`).join(' | '):'—')+' ]';
-  body+=P('This week: '+summary,{bold:true});
+  // project "progress" = each project's share of the member's total tasks (sums to 100%)
+  const sh=projShares(list);
+  const summary='[ '+sh.list.map(o=>`${o.label} - ${o.pct}%`).join(' | ')+' ]';
+  body+=P('Project share (by task count): '+summary,{bold:true});
   cur.forEach((t,i)=>{
     body+=P(`${i+1}. ${plabel(t)}: ${rewriteProfessional(t.current)}`,{indent:200});
-    body+=P(`Status: ${statusWord(t)} | ${t.progress}% complete | risk ${(t.risk||'M')[0]} | complexity ${t.complexity||'Medium'}`,{indent:540,color:'444C5C'});
+    body+=P(`Status: ${statusWord(t)} | project share ${sh.share(t)}% | risk ${(t.risk||'M')[0]} | complexity ${t.complexity||'Medium'}`,{indent:540,color:'444C5C'});
     // lean: only surface analysis when there is a real risk/blocker
     if(t.risk==='High' || /block|defect|timeout|fail|overdue|debug/i.test(t.current||''))
       body+=P('Analysis: '+(t.analysis||generateAnalysis(t)),{indent:540,color:'6B7A92'});
@@ -2242,12 +2261,16 @@ function applyRoleUI(){
 }
 function cloudPickName(){
   const sel=$('#cgName'); if(!sel) return;
-  const names=members.map(m=>m.name);
-  CLOUD.admins.forEach(a=>{ if(!names.some(n=>n.toLowerCase()===a)) names.push(a.charAt(0).toUpperCase()+a.slice(1)); });
-  sel.innerHTML=names.map(n=>`<option>${esc(n)}</option>`).join('');
+  let names;
+  if(CLOUD.authedAs==='admin'){                         // admin passcode -> only admin names
+    names=CLOUD.admins.map(a=>a.charAt(0).toUpperCase()+a.slice(1));
+  }else{                                                // team passcode -> members only (NO admin names)
+    names=members.map(m=>m.name).filter(n=>!isAdminName(n));
+  }
+  sel.innerHTML=names.map(n=>`<option>${esc(n)}</option>`).join('')||'<option value="">（名單尚未建立）</option>';
 }
 function cloudFinishLogin(name){
-  CLOUD.me={name, admin:isAdminName(name)};
+  CLOUD.me={name, admin: CLOUD.authedAs==='admin'};     // role comes from WHICH account, not the name
   store.save('wrt_cloud_me', CLOUD.me);
   if(!CLOUD.me.admin){                                  // member -> only their own work
     const m=members.find(x=>x.name.toLowerCase()===String(name).toLowerCase());
@@ -2274,14 +2297,16 @@ async function cloudInit(){
     const pass=$('#cgPass').value.trim(); const msg=$('#cgMsg');
     if(!pass){ msg.textContent='請輸入通行碼'; return; }
     msg.textContent='登入中…';
-    try{
-      await firebase.auth().signInWithEmailAndPassword(CLOUD.email, pass);
-      msg.textContent='';
-      await cloudEnter();
-      showGate('who');
-    }catch(e){
-      msg.textContent = /password|credential|invalid/i.test(e.code||e.message)? '通行碼錯誤' : ('登入失敗：'+(e.code||e.message));
+    let role=null;
+    try{ await firebase.auth().signInWithEmailAndPassword(CLOUD.memberEmail, pass); role='member'; }
+    catch(e1){
+      try{ await firebase.auth().signInWithEmailAndPassword(CLOUD.adminEmail, pass); role='admin'; }
+      catch(e2){ msg.textContent='通行碼錯誤'; return; }
     }
+    CLOUD.authedAs=role;
+    msg.textContent='';
+    await cloudEnter();
+    showGate('who');
   });
   $('#cgPass').addEventListener('keydown', e=>{ if(e.key==='Enter') $('#cgEnter').click(); });
   $('#cgGo').addEventListener('click', ()=>{ cloudFinishLogin($('#cgName').value); });
@@ -2290,9 +2315,10 @@ async function cloudInit(){
   // already signed-in this browser? skip the passcode, go straight in
   firebase.auth().onAuthStateChanged(async user=>{
     if(user && !CLOUD.ready){
+      CLOUD.authedAs = (user.email===CLOUD.adminEmail) ? 'admin' : 'member';
       await cloudEnter();
       const saved=store.load('wrt_cloud_me',null);
-      if(saved && saved.name){ CLOUD.me=saved; applyRoleUI(); $('#cloudGate').hidden=true; }
+      if(saved && saved.name){ CLOUD.me={name:saved.name, admin:CLOUD.authedAs==='admin'}; applyRoleUI(); $('#cloudGate').hidden=true; }
       else showGate('who');
     } else if(!user){
       showGate('pass');
