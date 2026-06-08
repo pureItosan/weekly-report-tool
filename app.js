@@ -40,6 +40,16 @@ let catalogMember = '';                            // catalog member filter
 let editingProj = '';                              // projk currently being edited
 let autoAdd = store.load('wrt_autoadd', true);        // auto-create members from report owners
 let fuzzy   = store.load('wrt_fuzzy', true);          // allow nickname/typo/partial matching (default on)
+/* member GROUPS — named rosters that remember member order + roles + aliases.
+   The active group always mirrors the live `members` array. */
+let memberGroups = store.load('wrt_groups', null);
+let activeGroup  = store.load('wrt_active_group', '');
+if(!Array.isArray(memberGroups) || !memberGroups.length){
+  memberGroups = [{name:'SPD RD3-1', members: members.slice()}];   // seed with the current roster
+  activeGroup  = 'SPD RD3-1';
+  store.save('wrt_groups', memberGroups); store.save('wrt_active_group', activeGroup);
+}
+if(!memberGroups.some(g=>g.name===activeGroup)) activeGroup = memberGroups[0].name;
 const filters = {q:'', project:'', member:'', status:'', role:'', hideEmpty:false};
 
 function persist(){
@@ -51,6 +61,8 @@ function persist(){
   try{ store.save('wrt_projmeta', projMeta); }catch(e){}
   try{ store.save('wrt_deleted', deletedNames); }catch(e){}
   try{ store.save('wrt_projmerge', projMerge); }catch(e){}
+  try{ const ag=memberGroups.find(g=>g.name===activeGroup); if(ag) ag.members=members.slice();
+       store.save('wrt_groups', memberGroups); store.save('wrt_active_group', activeGroup); }catch(e){}
   try{ store.save(LS.tasks, tasks); }
   catch(e){ console.warn('tasks persist failed', e);
     toast('⚠ 任務太多（多為圖片）超過瀏覽器儲存上限，名單已保留，任務本次未存。'); }
@@ -809,7 +821,7 @@ function buildBuckets(){
 }
 
 function renderAll(){
-  renderMembers(); renderBatches(); renderStats(); renderCatalog(); renderCharts(); renderFilters(); renderMembersArea(); renderWorkbenchSelect(); updateOcrBtn();
+  renderGroups(); renderMembers(); renderBatches(); renderStats(); renderCatalog(); renderCharts(); renderFilters(); renderMembersArea(); renderWorkbenchSelect(); updateOcrBtn();
 }
 function renderFilters(){
   const ps=$('#filterProject'); if(ps){
@@ -849,6 +861,50 @@ function renderMembers(){
     </li>`).join('');
   wireMemberDrag();
 }
+
+/* ---------- MEMBER GROUPS (named rosters: order + roles + aliases) ---------- */
+function syncActiveGroup(){ const g=memberGroups.find(x=>x.name===activeGroup); if(g) g.members=members.slice(); }
+function renderGroups(){
+  const sel=$('#groupSelect'); if(!sel) return;
+  sel.innerHTML=memberGroups.map(g=>`<option value="${esc(g.name)}"${g.name===activeGroup?' selected':''}>${esc(g.name)} · ${(g.members||[]).length}人</option>`).join('');
+}
+function switchGroup(name){
+  if(name===activeGroup || !memberGroups.some(g=>g.name===name)) return;
+  syncActiveGroup();                                   // save current roster into its group
+  activeGroup=name;
+  const g=memberGroups.find(x=>x.name===name);
+  members=(g.members||[]).map(m=>({...m, aliases:(m.aliases||[]).slice()}));
+  reresolveAllTasks(); persist(); renderAll();
+  toast('已切換群組：'+name);
+}
+function addGroup(name, copyCurrent){
+  name=String(name||'').trim(); if(!name) return false;
+  if(memberGroups.some(g=>g.name===name)){ toast('已有同名群組'); return false; }
+  syncActiveGroup();
+  memberGroups.push({name, members: copyCurrent? members.slice() : []});
+  activeGroup=name; members = copyCurrent? members.slice() : [];
+  reresolveAllTasks(); persist(); renderAll(); return true;
+}
+function createGroup(){
+  const name=(prompt('新群組名稱（例如 SPD RD3-2）：','')||'').trim(); if(!name) return;
+  const copy=confirm('要把目前的成員複製到新群組嗎？\n\n確定＝複製目前名單　|　取消＝建立空白名單');
+  if(addGroup(name, copy)) toast('已建立群組：'+name);
+}
+function renameGroup(){
+  const g=memberGroups.find(x=>x.name===activeGroup); if(!g) return;
+  const name=(prompt('群組改名：', g.name)||'').trim(); if(!name||name===g.name) return;
+  if(memberGroups.some(x=>x.name===name)){ toast('已有同名群組'); return; }
+  g.name=name; activeGroup=name; persist(); renderGroups(); toast('已改名為：'+name);
+}
+function deleteGroup(){
+  if(memberGroups.length<=1){ toast('至少要保留一個群組'); return; }
+  if(!confirm('刪除群組「'+activeGroup+'」？\n（只移除這份成員名單設定，任務資料不受影響）')) return;
+  memberGroups=memberGroups.filter(g=>g.name!==activeGroup);
+  activeGroup=memberGroups[0].name;
+  members=(memberGroups[0].members||[]).map(m=>({...m, aliases:(m.aliases||[]).slice()}));
+  reresolveAllTasks(); persist(); renderAll(); toast('已刪除群組');
+}
+
 function renderBatches(){
   $('#batchList').innerHTML = batches.length? batches.slice(0,8).map(b=>`
     <li><span>${esc(b.name)}<br><small>${b.date}</small></span>
@@ -1843,6 +1899,10 @@ function wireEvents(){
   $('#clearMembersBtn').addEventListener('click', clearMembers);
   $('#resetTasksBtn').addEventListener('click', resetTasks);
   $('#loadFromReportBtn').addEventListener('click', ()=>{ if(!tasks.length){ toast('請先匯入週報'); return; } const a=autoAddFromReport(); toast(a.length?('已補齊 '+a.length+' 位成員'):'報告中的負責人都已在名單'); });
+  $('#groupSelect').addEventListener('change', e=>switchGroup(e.target.value));
+  $('#newGroupBtn').addEventListener('click', createGroup);
+  $('#renameGroupBtn').addEventListener('click', renameGroup);
+  $('#delGroupBtn').addEventListener('click', deleteGroup);
   $('#autoAddChk').addEventListener('change', e=>{ autoAdd=e.target.checked; store.save('wrt_autoadd',autoAdd); });
   $('#fuzzyChk').addEventListener('change', e=>{ fuzzy=e.target.checked; store.save('wrt_fuzzy',fuzzy); reresolveAllTasks(); persist(); renderAll(); toast(fuzzy?'已開啟模糊比對':'已切回完整姓名比對'); });
   // filter controls
@@ -1967,6 +2027,7 @@ window.WRT={ get members(){return members;}, get tasks(){return tasks;}, get bat
   autoAddFromReport, reresolveAllTasks, buildNarrative, projKeyOf, applyProjAliases, openProject, openNarrative,
   projectGroups, editTaskField, addTaskOwner, removeTaskOwner, ensureTesseract, ocrImages, ocrReportToTasks, ocrTask, setMemberRole, setMemberRole2,
   navStat, mergeProjects, resolveProjk, ocrAllReports, dedupeTasks, cleanupGarbledMembers, snapName, get pendingReports(){return pendingReports;}, convertOcrRows,
+  switchGroup, addGroup, renameGroup, deleteGroup, get memberGroups(){return memberGroups;}, get activeGroup(){return activeGroup;},
   get deletedNames(){return deletedNames;}, get projMerge(){return projMerge;}, get projMeta(){return projMeta;},
   setCatalogMember:(v)=>{catalogMember=v;renderCatalog();},
   get filters(){return filters;}, setFilter:(k,v)=>{filters[k]=v;renderMembersArea();},

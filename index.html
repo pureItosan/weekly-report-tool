@@ -33,7 +33,14 @@
   <aside class="sidebar">
     <section class="panel">
       <h2>成員名單 <span class="pill" id="memberCount">0</span></h2>
-      <p class="hint">貼上或上傳成員清單。一行一位，可寫別名與專業：<br><code>Raveendra: Ravi, Rav</code> &nbsp;<code>Aaron [RF]</code><br>專業也可在下方每個人的下拉選單設定（Leader/EE/RF/ANT）。</p>
+      <div class="group-bar">
+        <span class="gb-label">群組</span>
+        <select id="groupSelect" title="切換群組（各自記住成員順序與專業）"></select>
+        <button class="btn xs" id="newGroupBtn" title="新增群組">＋</button>
+        <button class="btn xs" id="renameGroupBtn" title="群組改名">✎</button>
+        <button class="btn xs danger" id="delGroupBtn" title="刪除群組">🗑</button>
+      </div>
+      <p class="hint">群組會各自記住成員的<b>順序與專業</b>；切換群組即套用該名單。<br>貼上或上傳成員清單。一行一位，可寫別名與專業：<br><code>Raveendra: Ravi, Rav</code> &nbsp;<code>Aaron [RF]</code></p>
       <textarea id="memberPaste" rows="5" placeholder="David&#10;Mei&#10;Raveendra: Ravi&#10;Eric&#10;Isha"></textarea>
       <div class="row">
         <button class="btn sm primary" id="addMembersBtn">加入名單</button>

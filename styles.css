@@ -50,6 +50,12 @@ code{background:#0c1118;padding:1px 5px;border-radius:5px;color:var(--accent2);f
 .member-block.flash{animation:flashHL 1.5s ease-out}
 @keyframes flashHL{0%,16%{box-shadow:0 0 0 2px var(--accent),0 0 22px rgba(90,162,255,.55)}
   100%{box-shadow:0 0 0 0 transparent}}
+/* member-group switcher */
+.group-bar{display:flex;align-items:center;gap:6px;margin:10px 0 2px}
+.group-bar .gb-label{font-size:12px;color:var(--muted);flex:none;font-weight:600}
+.group-bar select{flex:1;min-width:0;background:var(--panel2);color:var(--text);
+  border:1px solid var(--line);border-radius:8px;padding:5px 7px;font-size:12px}
+.btn.xs{padding:4px 8px;font-size:12px;line-height:1.1;flex:none}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
   padding:14px;box-shadow:var(--shadow)}
 .panel h2{font-size:15px;display:flex;align-items:center;gap:8px;margin-bottom:8px}
