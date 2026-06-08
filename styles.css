@@ -162,6 +162,19 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--accent)}
 /* per-task delete in catalog task rows */
 .ctask-del{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px 5px;border-radius:5px;flex:none}
 .ctask-del:hover{background:#3a1c1c;color:#f87171}
+/* project schedule editor */
+.modal.modal-wide{max-width:1280px;width:96vw}
+.sched-preview{background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px;overflow-x:auto;margin-bottom:14px}
+.sched-preview svg{display:block}
+.sched-controls{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:12px}
+.sched-controls label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
+.sched-controls label.wide{flex:1 1 280px}
+.sched-table{width:100%;border-collapse:collapse;font-size:12px}
+.sched-table th{text-align:left;color:var(--muted);font-weight:600;padding:4px 6px;border-bottom:1px solid var(--line)}
+.sched-table td{padding:3px 6px}
+.sched-table input,.sched-table select{width:100%;padding:5px 7px;font-size:12px}
+.sched-table td:nth-child(1){width:130px}.sched-table td:nth-child(2){width:80px}
+.sched-table td:nth-child(4),.sched-table td:nth-child(5){width:135px}.sched-table td:last-child{width:34px}
 
 /* secondary role badge + two selects */
 .role-badge.sub{opacity:.72;font-weight:600}

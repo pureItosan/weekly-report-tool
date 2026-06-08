@@ -1167,6 +1167,110 @@ function addBlankProject(){
   const card=document.querySelector(`[data-projk="${k}"]`); if(card) card.scrollIntoView({behavior:'smooth',block:'center'});
 }
 function setProjPhase(projk, phase){ const m=projMeta[projk]||{}; m.phase=phase||''; projMeta[projk]=m; persist(); renderCatalog(); }
+
+/* ---------- PROJECT SCHEDULE (milestone timeline -> polished SVG, like the dev-schedule slides) ---------- */
+const SCHED_LANES_DEFAULT=['Milestone','HW','Enclosure/Tooling','SW'];
+function _sd(s){ if(!s) return null; const m=String(s).match(/(\d{4})\D(\d{1,2})\D(\d{1,2})/); return m? new Date(+m[1],+m[2]-1,+m[3]) : null; }
+function _mon(d){ const x=new Date(d); const k=(x.getDay()+6)%7; x.setDate(x.getDate()-k); x.setHours(0,0,0,0); return x; }
+function _md(d){ return (d.getMonth()+1)+'/'+d.getDate(); }
+function _sx(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+// build a polished schedule SVG from {lanes, items:[{lane,label,date,end,type:dot|bar|star,note,color}], start, end, note}
+function scheduleSVG(sched){
+  sched=sched||{};
+  const lanes=(sched.lanes&&sched.lanes.length)?sched.lanes:SCHED_LANES_DEFAULT;
+  const items=(sched.items||[]).map(it=>Object.assign({},it,{_d:_sd(it.date),_e:_sd(it.end)})).filter(it=>it._d);
+  const today=new Date(); today.setHours(0,0,0,0);
+  const ds=[today]; items.forEach(it=>{ ds.push(it._d); if(it._e) ds.push(it._e); });
+  let minD=_sd(sched.start), maxD=_sd(sched.end);
+  if(!minD) minD = ds.length? new Date(Math.min(...ds.map(d=>+d))) : _mon(today);
+  if(!maxD) maxD = ds.length? new Date(Math.max(...ds.map(d=>+d))) : new Date(+today+120*864e5);
+  const start=_mon(minD), end=_mon(new Date(+maxD+10*864e5));
+  const weeks=Math.max(6, Math.round((end-start)/(7*864e5)));
+  const weekW=26, gut=126, padT=66, laneH=96, padB=14;
+  const W=gut+weeks*weekW+20, H=padT+lanes.length*laneH+padB;
+  const X=d=>gut+((+d-+start)/864e5)/7*weekW;
+  let s=`<rect x="0" y="0" width="${W}" height="${H}" fill="#ffffff"/>`;
+  // quarter bands
+  let i=0; while(i<weeks){ const wd=new Date(+start+i*7*864e5); const q=wd.getFullYear()+' Q'+(Math.floor(wd.getMonth()/3)+1);
+    let j=i; while(j<weeks){ const wj=new Date(+start+j*7*864e5); if((wj.getFullYear()+' Q'+(Math.floor(wj.getMonth()/3)+1))!==q) break; j++; }
+    const x0=X(new Date(+start+i*7*864e5)), w=(j-i)*weekW;
+    s+=`<rect x="${x0}" y="8" width="${w}" height="20" fill="#c7d2e6" stroke="#ffffff"/><text x="${x0+w/2}" y="22" font-size="11" font-weight="700" fill="#1e293b" text-anchor="middle">${q}</text>`; i=j; }
+  // week gridlines + dates
+  for(let k=0;k<weeks;k++){ const wd=new Date(+start+k*7*864e5); const x=X(wd);
+    s+=`<line x1="${x}" y1="30" x2="${x}" y2="${H-padB}" stroke="#eef2f7"/><text x="${x+2}" y="42" font-size="8" fill="#64748b">${_md(wd)}</text>`; }
+  // lanes
+  lanes.forEach((ln,li)=>{ const yTop=padT+li*laneH, base=yTop+laneH*0.6;
+    s+=`<line x1="${gut}" y1="${yTop}" x2="${W-8}" y2="${yTop}" stroke="#cbd5e1"/><text x="10" y="${yTop+laneH*0.52}" font-size="13" font-weight="700" fill="#0f172a">${_sx(ln)}</text><line x1="${gut}" y1="${base}" x2="${W-8}" y2="${base}" stroke="#94a3b8" stroke-width="1.4"/>`; });
+  s+=`<line x1="${gut}" y1="${H-padB}" x2="${W-8}" y2="${H-padB}" stroke="#cbd5e1"/>`;
+  const baseOf=ln=>{ let li=lanes.indexOf(ln); if(li<0) li=0; return padT+li*laneH+laneH*0.6; };
+  // items
+  items.forEach(it=>{ const x=X(it._d), y=baseOf(it.lane||lanes[0]);
+    if(it.type==='bar' && it._e){ const x2=X(it._e), col=it.color||'#bfdbfe';
+      s+=`<rect x="${x}" y="${y-8}" width="${Math.max(6,x2-x)}" height="16" rx="4" fill="${col}" stroke="#60a5fa"/><text x="${(x+x2)/2}" y="${y-12}" font-size="9" fill="#1e3a8a" text-anchor="middle">${_sx(it.label)}</text>`;
+    } else if(it.type==='star'){
+      s+=`<text x="${x}" y="${y+7}" font-size="22" fill="${it.color||'#ec4899'}" text-anchor="middle">★</text><text x="${x}" y="${y-15}" font-size="9.5" font-weight="600" fill="#0f172a" text-anchor="middle">${_sx(it.label)}</text><text x="${x}" y="${y+24}" font-size="9" fill="#475569" text-anchor="middle">${_sx(it.date)}</text>`;
+    } else {
+      s+=`<circle cx="${x}" cy="${y}" r="7" fill="${it.color||'#facc15'}" stroke="#b8860b"/><text x="${x}" y="${y-15}" font-size="9.5" font-weight="600" fill="#0f172a" text-anchor="middle">${_sx(it.label)}</text><text x="${x}" y="${y+21}" font-size="9" fill="#475569" text-anchor="middle">${_sx(it.date)}</text>`;
+    }
+    if(it.note) s+=`<text x="${x}" y="${y+33}" font-size="8" fill="#7c3aed" text-anchor="middle">${_sx(it.note)}</text>`;
+  });
+  // now line
+  const nx=X(today);
+  s+=`<line x1="${nx}" y1="30" x2="${nx}" y2="${H-padB}" stroke="#dc2626" stroke-width="2" stroke-dasharray="5 4"/><rect x="${nx-18}" y="29" width="36" height="15" rx="3" fill="#f97316"/><text x="${nx}" y="40" font-size="9" font-weight="700" fill="#fff" text-anchor="middle">Now</text>`;
+  if(sched.note) s+=`<text x="${gut+4}" y="60" font-size="10" fill="#92400e">📌 ${_sx(sched.note)}</text>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="system-ui,Segoe UI,sans-serif">${s}</svg>`;
+}
+let _schedEdit=null;
+function openSchedule(projk){
+  const g=projectGroups().find(x=>x.projk===resolveProjk(projk));
+  const meta=projMeta[projk]||{};
+  const def={lanes:SCHED_LANES_DEFAULT.slice(), items:[], start:'', end:'', note:''};
+  _schedEdit={ projk, title:(meta.code||(g&&g.label)||projk), sched:JSON.parse(JSON.stringify(meta.schedule||def)) };
+  if(!_schedEdit.sched.lanes||!_schedEdit.sched.lanes.length) _schedEdit.sched.lanes=SCHED_LANES_DEFAULT.slice();
+  renderScheduleEditor(); $('#scheduleModal').hidden=false;
+}
+function renderScheduleEditor(){
+  const {title,sched}=_schedEdit;
+  const rows=(sched.items||[]).map((it,i)=>`<tr>
+    <td><select data-si="${i}" data-sf="lane">${sched.lanes.map(l=>`<option ${it.lane===l?'selected':''}>${esc(l)}</option>`).join('')}</select></td>
+    <td><select data-si="${i}" data-sf="type">${['dot','bar','star'].map(t=>`<option ${it.type===t?'selected':''}>${t}</option>`).join('')}</select></td>
+    <td><input data-si="${i}" data-sf="label" value="${esc(it.label||'')}" placeholder="名稱"></td>
+    <td><input type="date" data-si="${i}" data-sf="date" value="${esc(it.date||'')}"></td>
+    <td><input type="date" data-si="${i}" data-sf="end" value="${esc(it.end||'')}" title="bar 結束日"></td>
+    <td><input data-si="${i}" data-sf="note" value="${esc(it.note||'')}" placeholder="附註"></td>
+    <td><button class="btn xs danger" data-sdel="${i}">✕</button></td></tr>`).join('');
+  $('#scheduleInner').innerHTML=`
+    <div class="modal-head"><h2>📅 Schedule · ${esc(title)}</h2><button class="icon-btn" data-close>✕</button></div>
+    <div class="modal-body">
+      <div class="sched-preview">${(sched.items&&sched.items.length)?scheduleSVG(sched):'<p class="hint">在下方新增里程碑後，這裡會即時畫出時間軸預覽。</p>'}</div>
+      <div class="sched-controls">
+        <label>起 <input type="date" data-smeta="start" value="${esc(sched.start||'')}"></label>
+        <label>訖 <input type="date" data-smeta="end" value="${esc(sched.end||'')}"></label>
+        <label class="wide">泳道（逗號分隔）<input data-smeta="lanes" value="${esc(sched.lanes.join(', '))}"></label>
+        <label class="wide">標題附註 <input data-smeta="note" value="${esc(sched.note||'')}" placeholder="顯示在時間軸上方的說明文字（選填）"></label>
+      </div>
+      <table class="sched-table"><thead><tr><th>泳道</th><th>類型</th><th>名稱</th><th>日期</th><th>結束(bar)</th><th>附註</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+      <button class="btn sm" data-sadd="1">＋ 新增里程碑</button>
+      <p class="hint">類型：dot＝里程碑點、star＝重點樣品（粉紅星）、bar＝跨週活動（要填結束日）。</p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" data-sdownload="1">⬇ 下載 PNG</button>
+      <button class="btn" data-close>取消</button>
+      <button class="btn primary" data-ssave="1">儲存 Schedule</button>
+    </div>`;
+}
+function addSchedItem(){ _schedEdit.sched.items.push({lane:_schedEdit.sched.lanes[0]||'Milestone', type:'dot', label:'', date:'', end:'', note:''}); renderScheduleEditor(); }
+function delSchedItem(i){ _schedEdit.sched.items.splice(+i,1); renderScheduleEditor(); }
+function updSchedItem(i,f,v){ _schedEdit.sched.items[+i][f]=v; renderScheduleEditor(); }
+function updSchedMeta(f,v){ if(f==='lanes') _schedEdit.sched.lanes=v.split(/[,，]/).map(x=>x.trim()).filter(Boolean); else _schedEdit.sched[f]=v; renderScheduleEditor(); }
+function saveScheduleEdit(){ const m=projMeta[_schedEdit.projk]||{}; m.schedule=_schedEdit.sched; projMeta[_schedEdit.projk]=m; persist(); renderCatalog(); $('#scheduleModal').hidden=true; toast('已儲存 Schedule'); }
+function downloadSchedulePNG(){
+  const svg=scheduleSVG(_schedEdit.sched), blob=new Blob([svg],{type:'image/svg+xml;charset=utf-8'}), url=URL.createObjectURL(blob);
+  const img=new Image(); img.onload=()=>{ const c=document.createElement('canvas'); c.width=img.naturalWidth*2; c.height=img.naturalHeight*2;
+    const ctx=c.getContext('2d'); ctx.scale(2,2); ctx.fillStyle='#fff'; ctx.fillRect(0,0,img.naturalWidth,img.naturalHeight); ctx.drawImage(img,0,0); URL.revokeObjectURL(url);
+    c.toBlob(b=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=((_schedEdit.title||'project')+'_schedule.png').replace(/[\\/:*?"<>|]/g,'_'); a.click(); }); };
+  img.onerror=()=>{ URL.revokeObjectURL(url); toast('PNG 匯出失敗'); }; img.src=url;
+}
 function inferCategory(projStr){
   const s=String(projStr||'').toLowerCase();
   if(/dongle|\bdg\d|redcap/.test(s)) return 'Dongle';
@@ -1246,6 +1350,7 @@ function catalogCard(g){
       <div><h3><span class="drag-dot" title="拖曳此專案併到另一個">⠿</span> ${esc(g.label)}${masterTag}${merged?` <span class="merged-tag" title="已併入其他專案">＋${merged} 併</span>`:''}</h3><div class="pc-sub">${sub}${chipLine}</div></div>
       <div class="pc-actions">
         ${phaseSel}
+        <button class="btn sm" data-sched="${esc(g.projk)}" title="專案 Schedule 時間軸">📅${(meta.schedule&&(meta.schedule.items||[]).length)?' '+meta.schedule.items.length:''}</button>
         ${merged?`<button class="btn sm" data-unmerge="${esc(g.projk)}" title="取消併入">↩ 取消併</button>`:''}
         <button class="btn sm" data-edit-proj="${esc(g.projk)}">${ed?'取消':'✎ Edit'}</button>
         <button class="btn sm danger" data-delproj="${esc(g.projk)}" title="刪除此專案">🗑</button>
@@ -2308,6 +2413,11 @@ function wireEvents(){
     if(t.dataset.saveProj!==undefined){ saveProjMeta(t.dataset.saveProj, t.closest('.proj-card')); return; }
     if(t.dataset.unmerge!==undefined){ unmergeProject(t.dataset.unmerge); return; }
     if(t.dataset.delproj!==undefined){ deleteProjectGroup(t.dataset.delproj); return; }
+    if(t.dataset.sched!==undefined){ openSchedule(t.dataset.sched); return; }
+    if(t.dataset.sadd!==undefined){ addSchedItem(); return; }
+    if(t.dataset.sdel!==undefined){ delSchedItem(t.dataset.sdel); return; }
+    if(t.dataset.ssave!==undefined){ saveScheduleEdit(); return; }
+    if(t.dataset.sdownload!==undefined){ downloadSchedulePNG(); return; }
     if(t.dataset.addcat!==undefined){ const n=prompt('新增專案分類名稱：'); if(n) addCategory(n); return; }
     if(t.dataset.renamecat!==undefined){ const n=prompt('將分類「'+t.dataset.renamecat+'」改名為：', t.dataset.renamecat); if(n) renameCategory(t.dataset.renamecat, n); return; }
     if(t.dataset.delcat!==undefined){ deleteCategory(t.dataset.delcat); return; }
@@ -2333,6 +2443,8 @@ function wireEvents(){
     if(el.dataset.addimg!==undefined){ addTaskImages(el.dataset.addimg, el.files); el.value=''; return; }
     if(el.dataset.setcat!==undefined){ setProjCategory(el.dataset.setcat, el.value); return; }
     if(el.dataset.setphase!==undefined){ setProjPhase(el.dataset.setphase, el.value); return; }
+    if(el.dataset.si!==undefined && el.dataset.sf){ updSchedItem(el.dataset.si, el.dataset.sf, el.value); return; }
+    if(el.dataset.smeta!==undefined){ updSchedMeta(el.dataset.smeta, el.value); return; }
     if(el.dataset.edit && el.dataset.tid){ editTaskField(el.dataset.tid, el.dataset.edit, el.value); return; }
     if(el.dataset.addowner){ addTaskOwner(el.dataset.addowner, el.value); el.value=''; return; }
   });
