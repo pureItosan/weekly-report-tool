@@ -1779,16 +1779,18 @@ function renderStats(){
   const doneRate=total?Math.round(closed/total*100):0;     // 完成率 = 已結案 / 總任務（不依賴成員自填進度，不會出現 NaN）
   const high=vt.filter(t=>t.risk==='High'&&!isClosed(t)).length;
   const newCnt=vt.filter(t=>t.status==='New').length;
-  // each stat card doubles as navigation: [icon, value, label, colorClass, view, statusFilter]
+  // each stat card doubles as navigation: [icon, value, label, colorClass, view, statusFilter].
+  // view=null -> display-only (no click, no highlight) — used for 完成率 so it doesn't clash with 已結案.
   const cards=[
     ['📁', projCount, '專案 Projects', '', 'catalog', ''],
     ['👥', members.length, '成員 Members', '', 'members', ''],
     ['📋', total, '任務 Tasks', '', 'members', ''],
     ['✅', closed+'/'+total, '已結案 Closed', 'ok', 'members', 'closed'],
-    ['📈', doneRate+'%', '完成率 Done', 'accent', 'members', 'closed'],
+    ['📈', doneRate+'%', '完成率 Done', 'accent', null, ''],
     ['⚠️', high, '高風險 High risk', 'warn', 'members', 'highrisk'],
   ];
   $('#statsRow').innerHTML=cards.map(([ic,n,l,c,view,flt])=>{
+    if(!view) return `<div class="stat ${c}"><div class="st-ic">${ic}</div><div><div class="num">${n}</div><div class="lbl">${l}</div></div></div>`;
     const active = view===currentView && (flt||'')===(filters.status||'');
     return `<div class="stat nav ${c} ${active?'active':''}" data-nav="${view}" data-flt="${flt}">
       <div class="st-ic">${ic}</div><div><div class="num">${n}</div><div class="lbl">${l}</div></div></div>`;
@@ -2045,10 +2047,14 @@ function renderProjImages(){
     <div class="modal-foot"><button class="btn" data-close>關閉</button></div>`;
 }
 async function addProjectImages(projk, fileList){
-  const files=Array.from(fileList||[]).filter(f=>/^image\//.test(f.type)); if(!files.length) return;
-  const m=projMeta[projk]||{}; m.images=m.images||[];
-  for(const f of files){ const s=await shrinkImageBudget(await fileToDataURL(f), 2200); m.images.push({id:uid(), data:s.data, w:s.w, h:s.h}); }
-  projMeta[projk]=m; persist(); renderProjImages(); renderCatalog(); toast('已新增 '+files.length+' 張圖片');
+  const all=Array.from(fileList||[]);
+  const files=all.filter(f=>!f.type || /^image\//.test(f.type));   // input already限定圖片；手機某些格式 type 會是空字串，也放行
+  if(!files.length){ toast(all.length?'這個檔案不是圖片':'沒有選到檔案'); return; }
+  toast('處理圖片中…請稍候');
+  const m=projMeta[projk]||{}; m.images=m.images||[]; let n=0;
+  for(const f of files){ try{ const s=await shrinkImageBudget(await fileToDataURL(f), 2200); m.images.push({id:uid(), data:s.data, w:s.w, h:s.h}); n++; }catch(e){ console.warn('project image failed', e); } }
+  if(!n){ toast('圖片處理失敗，請換個檔案試試'); return; }
+  projMeta[projk]=m; persist(); renderProjImages(); renderCatalog(); toast('已新增 '+n+' 張圖片');
 }
 function removeProjectImage(projk, id){
   const m=projMeta[projk]; if(!m||!m.images) return;
@@ -3324,6 +3330,11 @@ window.WRT={ get members(){return members;}, get tasks(){return tasks;}, get bat
    via the `applying` flag + snapshot `hasPendingWrites`.
    ===================================================================== */
 function projMetaNoImg(){ const o={}; Object.keys(projMeta).forEach(k=>{ const c=Object.assign({},projMeta[k]); delete c.images; o[k]=c; }); return o; }
+let _cloudErrAt=0;
+function cloudErrToast(e){                              // surface cloud-sync failures (throttled) so uploads never fail silently
+  if(e && /permission|insufficient/i.test(e.message||'')){ const now=Date.now(); if(now-_cloudErrAt>20000){ _cloudErrAt=now;
+    toast('⚠ 雲端同步失敗：請確認已登入，且 Firebase 規則為 allow read,write: if request.auth!=null'); } }
+}
 function cloudSave(){
   if(!CLOUD.on || !CLOUD.ready || CLOUD.applying) return;
   clearTimeout(CLOUD.saveTimer);
@@ -3332,7 +3343,7 @@ function cloudSave(){
     CLOUD.db.collection('workspace').doc('main').set({
       members, groups:memberGroups, activeGroup, tasks:tasksLite, batches,
       projAliases, projMeta:projMetaNoImg(), projMerge, projCats, idCodeMap, deletedNames, _ts:Date.now()
-    }).catch(e=>console.warn('cloud save failed', e));
+    }).catch(e=>{ console.warn('cloud save failed', e); cloudErrToast(e); });
     cloudSaveImages();                                  // upload any new images to the images collection
   }, 700);
 }
@@ -3343,7 +3354,7 @@ function cloudSaveImages(){
       CLOUD.upImgs.add(im.id);
       CLOUD.db.collection('images').doc(im.id)
         .set({id:im.id, taskId:t.id, data:im.data, w:im.w||0, h:im.h||0, _ts:Date.now()})
-        .catch(e=>{ CLOUD.upImgs.delete(im.id); console.warn('image upload failed', e); });
+        .catch(e=>{ CLOUD.upImgs.delete(im.id); console.warn('image upload failed', e); cloudErrToast(e); });
     }
   }));
   Object.keys(projMeta).forEach(pk=>((projMeta[pk]&&projMeta[pk].images)||[]).forEach(im=>{   // project images (block diagrams / schedules)
@@ -3351,7 +3362,7 @@ function cloudSaveImages(){
       CLOUD.upImgs.add(im.id);
       CLOUD.db.collection('images').doc(im.id)
         .set({id:im.id, projk:pk, data:im.data, w:im.w||0, h:im.h||0, _ts:Date.now()})
-        .catch(e=>{ CLOUD.upImgs.delete(im.id); console.warn('proj image upload failed', e); });
+        .catch(e=>{ CLOUD.upImgs.delete(im.id); console.warn('proj image upload failed', e); cloudErrToast(e); });
     }
   }));
 }
