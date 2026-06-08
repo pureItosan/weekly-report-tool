@@ -948,7 +948,7 @@ function renderMembers(){
       <div class="mchip-top">
         <span class="drag-handle" title="拖曳調整順序">⠿</span>
         <span class="mname">${esc(m.name)}</span>
-        ${m.cname?`<span class="cname" title="中文名">${esc(m.cname)}</span>`:''}
+        ${m.cname?`<span class="cname" title="小名 Nickname">${esc(m.cname)}</span>`:''}
         ${roleBadge(m.role)}${roleBadge(m.role2,true)}
         ${m.aliases.length?`<span class="alias">${esc(m.aliases.join(', '))}</span>`:''}
         <button class="mdel" title="刪除" data-del-member="${m.id}">✕</button>
@@ -956,7 +956,7 @@ function renderMembers(){
       <div class="mchip-roles">
         <label>主<select class="role-mini" data-setrole="${m.id}">${roleOptions(m.role)}</select></label>
         <label>副<select class="role-mini sub" data-setrole2="${m.id}">${roleOptions(m.role2)}</select></label>
-        <input class="cname-mini" data-setcname="${m.id}" value="${esc(m.cname||'')}" placeholder="中文名" maxlength="12" title="中文姓名">
+        <input class="cname-mini" data-setcname="${m.id}" value="${esc(m.cname||'')}" placeholder="小名 Nickname" maxlength="16" title="小名 / Nickname">
       </div>
     </li>`).join('');
   wireMemberDrag();
