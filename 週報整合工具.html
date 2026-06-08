@@ -166,6 +166,9 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--accent)}
 .pc-cat-sel:hover{background:#1c2a40}
 .pc-cat-sel:focus{outline:1px solid var(--accent)}
 .pc-cat-sel option{background:var(--panel);color:var(--text);font-weight:600}
+/* per-task delete in catalog task rows */
+.ctask-del{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px 5px;border-radius:5px;flex:none}
+.ctask-del:hover{background:#3a1c1c;color:#f87171}
 
 /* secondary role badge + two selects */
 .role-badge.sub{opacity:.72;font-weight:600}
@@ -1458,7 +1461,12 @@ function computeDelta(oldT,newT){
   if(norm(oldT.next)!==norm(newT.next)) d.push('下週計畫已更新');
   return d.join('；');
 }
-function deleteTask(id){ tasks=tasks.filter(t=>t.id!==id); persist(); renderAll(); }
+function deleteTask(id){
+  const t=tasks.find(x=>x.id===id); if(!t) return false;
+  if(!confirm('刪除此任務？\n'+((t.current||t.next||'(無描述)').slice(0,60))+'\n刪除後無法復原。')) return false;
+  (t.images||[]).forEach(im=>cloudDeleteImage(im.id));        // sync-remove its cloud images too
+  tasks=tasks.filter(x=>x.id!==id); persist(); renderAll(); toast('已刪除任務'); return true;
+}
 function resetTasks(){ if(confirm('清空所有任務？(成員名單會保留)')){ tasks=[]; batches=[]; persist(); renderAll(); } }
 // 一鍵清除內容：清掉所有任務、批次與圖片（雲端圖片也一併刪除），成員名單保留。雙重確認避免誤按。
 function clearAllContent(){
@@ -1522,7 +1530,7 @@ function generateAnalysis(t){
   if(bits.length<=1) bits.unshift('Work is progressing as planned with no major blockers reported.');
   return bits.join(' ');
 }
-function isClosed(t){ return (t.progress||0)>=100; }
+function isClosed(t){ return (+t.progress||0)>=100; }   // coerce: progress may arrive as a string ("100")
 function statusLine(t){
   const p=t.progress;
   if(p>=100) return 'Closed (100%)';
@@ -1697,15 +1705,16 @@ function renderStats(){
   const closed=vt.filter(isClosed).length;
   const active=total-closed;
   const projCount=new Set(vt.map(t=>resolveProjk(t.projk||t.key))).size;  // merged projects count as one
-  const avg=total?Math.round(vt.reduce((s,t)=>s+(t.progress||0),0)/total):0;
+  const doneRate=total?Math.round(closed/total*100):0;     // 完成率 = 已結案 / 總任務（不依賴成員自填進度，不會出現 NaN）
   const high=vt.filter(t=>t.risk==='High'&&!isClosed(t)).length;
+  const newCnt=vt.filter(t=>t.status==='New').length;
   // each stat card doubles as navigation: [icon, value, label, colorClass, view, statusFilter]
   const cards=[
     ['📁', projCount, '專案 Projects', '', 'catalog', ''],
     ['👥', members.length, '成員 Members', '', 'members', ''],
     ['📋', total, '任務 Tasks', '', 'members', ''],
     ['✅', closed+'/'+total, '已結案 Closed', 'ok', 'members', 'closed'],
-    ['📊', avg+'%', '平均進度 Avg', 'accent', 'workload', ''],
+    ['📈', doneRate+'%', '完成率 Done', 'accent', 'members', 'closed'],
     ['⚠️', high, '高風險 High risk', 'warn', 'members', 'highrisk'],
   ];
   $('#statsRow').innerHTML=cards.map(([ic,n,l,c,view,flt])=>{
@@ -1882,6 +1891,7 @@ function catalogTaskRow(t){
       <label>Risk<select data-edit="risk" data-tid="${t.id}">${optTags(['Low','Medium','High'],t.risk)}</select></label>
       <label>Cx<select data-edit="complexity" data-tid="${t.id}">${optTags(['Low','Medium','High'],t.complexity)}</select></label>
       <label>%<input type="number" min="0" max="100" value="${t.progress}" data-edit="progress" data-tid="${t.id}" class="prog-in"></label>
+      <button class="ctask-del" data-del-task="${t.id}" title="刪除此任務">🗑</button>
     </div>
   </div>`;
 }
@@ -1998,7 +2008,7 @@ function renderMembersArea(){
   const fc=$('#filterCount'); if(fc) fc.textContent='顯示 '+shown.size+' 筆任務';
 }
 function memberBlock(name, list, isUnassigned, mid){
-  const avg=list.length?Math.round(list.reduce((s,t)=>s+(t.progress||0),0)/list.length):0;
+  const avg=list.length?Math.round(list.reduce((s,t)=>s+(+t.progress||0),0)/list.length):0;
   // aggregate this member's detail/analysis images into a header strip (easy to find, not buried in one card)
   const imgs=[]; const seen=new Set();
   list.forEach(t=>(t.images||[]).forEach(im=>{ if(im&&im.id&&!seen.has(im.id)){ seen.add(im.id); imgs.push(im); } }));
@@ -2134,7 +2144,7 @@ function openProject(projk){
   const list=tasks.filter(t=>!t.imageReport && resolveProjk(t.projk||t.key)===resolveProjk(projk));
   if(!list.length) return;
   const label=list[0].projectLabel||shortProj(list[0].project);
-  const avg=Math.round(list.reduce((s,t)=>s+(t.progress||0),0)/list.length);
+  const avg=list.length?Math.round(list.reduce((s,t)=>s+(+t.progress||0),0)/list.length):0;
   const closed=list.filter(isClosed).length;
   $('#taskModalInner').innerHTML=`
     <div class="modal-head"><h2>${esc(label)} <span class="ch-sub">${list.length} 個任務 · 平均 ${avg}% · ${closed} 已結案</span></h2>
@@ -2899,7 +2909,7 @@ function wireEvents(){
     const navCard=t.closest('[data-nav]'); if(navCard){ navStat(navCard.dataset.nav, navCard.dataset.flt); return; }
     if(t.closest('.mname') && t.closest('.mchip')){ jumpToMember(t.closest('.mchip').dataset.mid); return; }
     if(t.dataset.delMember){ deleteMember(t.dataset.delMember); return; }
-    if(t.dataset.delTask){ deleteTask(t.dataset.delTask); $('#taskModal').hidden=true; return; }
+    if(t.dataset.delTask){ if(deleteTask(t.dataset.delTask)) $('#taskModal').hidden=true; return; }
     if(t.dataset.rmWb!==undefined){ wbImages.splice(+t.dataset.rmWb,1); renderWbThumbs(); return; }
     if(t.dataset.phrase){ const ta=$('#wbThisWeek'); ta.value=(ta.value?ta.value+' ':'')+PHRASES[t.dataset.phrase]; return; }
     if(t.dataset.clearimg){ clearTaskImages(t.dataset.clearimg); return; }

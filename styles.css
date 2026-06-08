@@ -159,6 +159,9 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--accent)}
 .pc-cat-sel:hover{background:#1c2a40}
 .pc-cat-sel:focus{outline:1px solid var(--accent)}
 .pc-cat-sel option{background:var(--panel);color:var(--text);font-weight:600}
+/* per-task delete in catalog task rows */
+.ctask-del{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px 5px;border-radius:5px;flex:none}
+.ctask-del:hover{background:#3a1c1c;color:#f87171}
 
 /* secondary role badge + two selects */
 .role-badge.sub{opacity:.72;font-weight:600}
