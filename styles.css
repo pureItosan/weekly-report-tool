@@ -216,6 +216,15 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--accent)}
 .dd-doc img{width:100%;max-height:220px;object-fit:contain;background:#fff;cursor:zoom-in;display:block}
 .dd-doc figcaption{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:8px 10px;font-size:12.5px}
 .dd-doctitle{font-weight:600;color:#cdd8e8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* design docs — folder + list view inside a project */
+.dd-folder{margin-top:16px}
+.dd-folder-head{font-size:13px;font-weight:700;color:var(--accent);border-bottom:1px solid var(--line);padding-bottom:5px;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+.dd-list{display:flex;flex-direction:column;gap:6px}
+.dd-row{display:flex;align-items:center;gap:12px;padding:7px 10px;background:var(--panel2);border:1px solid var(--line);border-radius:8px}
+.dd-row:hover{border-color:var(--accent)}
+.dd-rowthumb{width:56px;height:42px;object-fit:cover;border-radius:5px;background:#fff;cursor:zoom-in;flex:none}
+.dd-rowtitle{flex:1;font-size:13px;color:#dbe4f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dd-row .img-del{position:static;flex:none}
 /* schedule attach row */
 .sched-attach{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
 .sched-refs{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px}
@@ -301,7 +310,8 @@ pre.narrative{white-space:pre-wrap;word-break:break-word;font-family:"Consolas",
 .proj-card.drop-target{outline:2px dashed var(--accent);outline-offset:2px;background:#1c2a40}
 .drag-dot{cursor:grab;color:var(--muted);font-size:13px;user-select:none}
 .merged-tag{font-size:10px;font-weight:700;color:#7dd3fc;background:#10303a;border:1px solid #1a4a5a;border-radius:5px;padding:1px 6px;vertical-align:middle}
-.pc-actions{display:flex;gap:6px;flex:none}
+.pc-actions{display:flex;gap:6px;flex:none;align-items:center}
+.pc-act{font-size:13px;padding:7px 13px;font-weight:600}
 .proj-card h3{display:flex;align-items:center;gap:6px}
 .pc-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
 details.cat-group{margin-bottom:8px}

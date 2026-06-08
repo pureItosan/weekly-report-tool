@@ -1302,7 +1302,7 @@ function seedDefaultSchedule(){                         // a standard HW/SW mile
 }
 function applyDefaultTemplate(){ if(seedDefaultSchedule()){ renderScheduleEditor(); toast('已帶出預設里程碑模板，請依實際調整'); } else toast('已有里程碑（先清空才會套模板）'); }
 async function uploadScheduleAttach(fileList){
-  const n=await addProjectImages(_schedEdit.projk, fileList, 'Schedule 附檔');
+  const n=await addProjectImages(_schedEdit.projk, fileList, 'Schedule 附檔', 'Schedule');
   if(n){ const seeded=seedDefaultSchedule(); renderScheduleEditor(); if(seeded) toast('已附上 Schedule，並帶出預設里程碑，請調整'); }
 }
 function exportSchedulePPT(){
@@ -1369,29 +1369,38 @@ function renderDesignDocs(){
     </div>
     <div class="modal-foot"><button class="btn" data-close>關閉</button></div>`;
 }
+const DOC_FOLDERS=['Block Diagram','GPIO Table','Schematic','Layout','Spec','其他'];
 function renderDesignDocsProject(){
   const projk=_ddProjk, m=projMeta[projk]||{}, imgs=m.images||[];
   const g=projectGroups().find(x=>x.projk===resolveProjk(projk));
-  const docs= imgs.length ? imgs.map(im=>`<figure class="dd-doc"><img src="${im.data}" data-light="${im.id}"><figcaption><span class="dd-doctitle">${esc(im.title||'未命名文件')}</span><button class="img-del" data-pdelimg="${esc(projk)}|${im.id}" title="刪除">✕</button></figcaption></figure>`).join('') : '<p class="hint">這個專案還沒有設計文件，從上方上傳第一份。</p>';
+  // group docs into folders (by their `folder`), list-view rows inside each folder
+  const byFolder={}; imgs.forEach(im=>{ const f=im.folder||'其他'; (byFolder[f]=byFolder[f]||[]).push(im); });
+  const folders=[...DOC_FOLDERS.filter(f=>byFolder[f]), ...Object.keys(byFolder).filter(f=>!DOC_FOLDERS.includes(f))];
+  const body= imgs.length ? folders.map(f=>`
+      <div class="dd-folder">
+        <div class="dd-folder-head">📁 ${esc(f)} <span class="ct-n">${byFolder[f].length}</span></div>
+        <div class="dd-list">${byFolder[f].map(im=>`<div class="dd-row"><img class="dd-rowthumb" src="${im.data}" data-light="${im.id}"><span class="dd-rowtitle">${esc(im.title||'未命名文件')}</span><button class="img-del" data-pdelimg="${esc(projk)}|${im.id}" title="刪除">✕</button></div>`).join('')}</div>
+      </div>`).join('') : '<p class="hint">這個專案還沒有設計文件，選資料夾、填名稱後從右邊上傳第一份。</p>';
   $('#projImgInner').innerHTML=`
     <div class="modal-head"><h2><button class="btn xs" data-ddback="1">← 返回</button> &nbsp;📐 ${esc(m.code||(g&&g.label)||projk)} · 設計文件</h2><button class="icon-btn" data-close>✕</button></div>
     <div class="modal-body">
       <div class="dd-upload">
-        <input id="ddTitle" placeholder="文件標題（例：Block Diagram、GPIO Table、Schematic）">
-        <label class="btn sm primary">＋ 上傳設計文件<input type="file" accept="image/*" multiple hidden data-ddaddimg="1"></label>
+        <select id="ddFolder" title="資料夾 / 分類">${DOC_FOLDERS.map(f=>`<option>${esc(f)}</option>`).join('')}</select>
+        <input id="ddTitle" placeholder="文件名稱（例：RX Block、Top GPIO）">
+        <label class="btn sm primary">＋ 上傳<input type="file" accept="image/*" multiple hidden data-ddaddimg="1"></label>
       </div>
-      <p class="hint">填標題 → 上傳。可放系統方塊圖、GPIO Table、架構圖等；點圖放大、可刪除，雲端自動同步。</p>
-      <div class="dd-docs">${docs}</div>
+      <p class="hint">選資料夾（Block Diagram / GPIO Table / Schematic…）→ 填名稱 → 上傳。點縮圖放大、可刪除，雲端自動同步。</p>
+      ${body}
     </div>
     <div class="modal-foot"><button class="btn" data-close>關閉</button></div>`;
 }
-async function addProjectImages(projk, fileList, title){
+async function addProjectImages(projk, fileList, title, folder){
   const all=Array.from(fileList||[]);
   const files=all.filter(f=>!f.type || /^image\//.test(f.type));   // input already限定圖片；手機某些格式 type 會是空字串，也放行
   if(!files.length){ toast(all.length?'這個檔案不是圖片':'沒有選到檔案'); return 0; }
   toast('處理圖片中…請稍候');
   const m=projMeta[projk]||{}; m.images=m.images||[]; let n=0;
-  for(const f of files){ try{ const s=await shrinkImageBudget(await fileToDataURL(f), 2200); m.images.push({id:uid(), data:s.data, w:s.w, h:s.h, title:title||''}); n++; }catch(e){ console.warn('project image failed', e); } }
+  for(const f of files){ try{ const s=await shrinkImageBudget(await fileToDataURL(f), 2200); m.images.push({id:uid(), data:s.data, w:s.w, h:s.h, title:title||'', folder:folder||''}); n++; }catch(e){ console.warn('project image failed', e); } }
   if(!n){ toast('圖片處理失敗，請換個檔案試試'); return 0; }
   projMeta[projk]=m; persist(); renderCatalog();
   if(!$('#projImgModal').hidden) renderDesignDocs();
@@ -1480,10 +1489,10 @@ function catalogCard(g){
       <div><h3><span class="drag-dot" title="拖曳此專案併到另一個">⠿</span> ${esc(g.label)}${masterTag}${merged?` <span class="merged-tag" title="已併入其他專案">＋${merged} 併</span>`:''}</h3><div class="pc-sub">${sub}${chipLine}</div></div>
       <div class="pc-actions">
         ${phaseSel}
-        <button class="btn sm" data-sched="${esc(g.projk)}" title="專案 Schedule 時間軸">📅${(meta.schedule&&(meta.schedule.items||[]).length)?' '+meta.schedule.items.length:''}</button>
-        ${merged?`<button class="btn sm" data-unmerge="${esc(g.projk)}" title="取消併入">↩ 取消併</button>`:''}
-        <button class="btn sm" data-edit-proj="${esc(g.projk)}">${ed?'取消':'✎ Edit'}</button>
-        <button class="btn sm danger" data-delproj="${esc(g.projk)}" title="刪除此專案">🗑</button>
+        <button class="btn pc-act" data-sched="${esc(g.projk)}" title="專案 Schedule 時間軸">📅 Schedule${(meta.schedule&&(meta.schedule.items||[]).length)?' ('+meta.schedule.items.length+')':''}</button>
+        ${merged?`<button class="btn pc-act" data-unmerge="${esc(g.projk)}" title="取消併入">↩ 取消併</button>`:''}
+        <button class="btn pc-act" data-edit-proj="${esc(g.projk)}">${ed?'取消':'✎ Edit'}</button>
+        <button class="btn pc-act danger" data-delproj="${esc(g.projk)}" title="刪除此專案">🗑 刪除</button>
       </div>
     </div>
     ${metaRow}
@@ -2583,7 +2592,7 @@ function wireEvents(){
     if(el.dataset.setphase!==undefined){ setProjPhase(el.dataset.setphase, el.value); return; }
     if(el.dataset.si!==undefined && el.dataset.sf){ updSchedItem(el.dataset.si, el.dataset.sf, el.value); return; }
     if(el.dataset.smeta!==undefined){ updSchedMeta(el.dataset.smeta, el.value); return; }
-    if(el.dataset.ddaddimg!==undefined){ const title=(($('#ddTitle')||{}).value||'').trim(); if(_ddProjk) addProjectImages(_ddProjk, el.files, title); el.value=''; return; }
+    if(el.dataset.ddaddimg!==undefined){ const title=(($('#ddTitle')||{}).value||'').trim(), folder=($('#ddFolder')||{}).value||''; if(_ddProjk) addProjectImages(_ddProjk, el.files, title, folder); el.value=''; return; }
     if(el.dataset.saddimg!==undefined){ uploadScheduleAttach(el.files); el.value=''; return; }
     if(el.dataset.edit && el.dataset.tid){ editTaskField(el.dataset.tid, el.dataset.edit, el.value); return; }
     if(el.dataset.addowner){ addTaskOwner(el.dataset.addowner, el.value); el.value=''; return; }
@@ -2673,13 +2682,14 @@ function cloudErrToast(e){                              // surface cloud-sync fa
 }
 function cloudSave(){
   if(!CLOUD.on || !CLOUD.ready || CLOUD.applying) return;
+  CLOUD.dirty=true;                                     // we have unsaved local edits -> snapshots must not clobber them until saved
   clearTimeout(CLOUD.saveTimer);
   CLOUD.saveTimer=setTimeout(()=>{
     const tasksLite=tasks.map(t=>{ const c=Object.assign({},t); delete c.images; c._imgN=(t.images||[]).length; return c; });
     CLOUD.db.collection('workspace').doc('main').set({
       members, groups:memberGroups, activeGroup, tasks:tasksLite, batches,
       projAliases, projMeta:projMetaNoImg(), projMerge, projCats, idCodeMap, deletedNames, _ts:Date.now()
-    }).catch(e=>{ console.warn('cloud save failed', e); cloudErrToast(e); });
+    }).then(()=>{ CLOUD.dirty=false; }).catch(e=>{ CLOUD.dirty=false; console.warn('cloud save failed', e); cloudErrToast(e); });
     cloudSaveImages();                                  // upload any new images to the images collection
   }, 700);
 }
@@ -2697,7 +2707,7 @@ function cloudSaveImages(){
     if(im && im.id && im.data && !CLOUD.upImgs.has(im.id)){
       CLOUD.upImgs.add(im.id);
       CLOUD.db.collection('images').doc(im.id)
-        .set({id:im.id, projk:pk, title:im.title||'', data:im.data, w:im.w||0, h:im.h||0, _ts:Date.now()})
+        .set({id:im.id, projk:pk, title:im.title||'', folder:im.folder||'', data:im.data, w:im.w||0, h:im.h||0, _ts:Date.now()})
         .catch(e=>{ CLOUD.upImgs.delete(im.id); console.warn('proj image upload failed', e); cloudErrToast(e); });
     }
   }));
@@ -2737,7 +2747,7 @@ function cloudLoadImagesInto(snap){
   CLOUD.imgsByTask={}; CLOUD.imgsByProj={};
   snap.forEach(dd=>{ const im=dd.data(); if(!im||!im.id) return;
     CLOUD.upImgs.add(im.id);
-    if(im.projk) (CLOUD.imgsByProj[im.projk]=CLOUD.imgsByProj[im.projk]||[]).push({id:im.id,data:im.data,w:im.w,h:im.h,title:im.title||''});
+    if(im.projk) (CLOUD.imgsByProj[im.projk]=CLOUD.imgsByProj[im.projk]||[]).push({id:im.id,data:im.data,w:im.w,h:im.h,title:im.title||'',folder:im.folder||''});
     else (CLOUD.imgsByTask[im.taskId]=CLOUD.imgsByTask[im.taskId]||[]).push({id:im.id,data:im.data,w:im.w,h:im.h}); });
 }
 async function cloudEnter(){                         // load once + subscribe to live updates
@@ -2745,16 +2755,19 @@ async function cloudEnter(){                         // load once + subscribe to
   // load cloud images first so they attach when the workspace doc is applied
   try{ cloudLoadImagesInto(await CLOUD.db.collection('images').get()); }catch(e){ console.warn('image load failed', e); }
   let existed=false;
-  try{ const snap=await ref.get(); if(snap.exists){ existed=true; CLOUD.applying=true; cloudApplyDoc(snap.data()); CLOUD.applying=false; persistLocal(); } }
+  try{ const snap=await ref.get(); if(snap.exists){ existed=true; CLOUD.applying=true; try{ cloudApplyDoc(snap.data()); } finally { CLOUD.applying=false; } persistLocal(); } }
   catch(e){ console.warn('cloud load failed', e); }
   ref.onSnapshot(snap=>{
-    if(!snap.exists || snap.metadata.hasPendingWrites) return;   // ignore our own writes
-    CLOUD.applying=true; cloudApplyDoc(snap.data()); CLOUD.applying=false;
+    // ignore our own writes; and never overwrite unsaved local edits (dirty) — that was reverting imports/deletes
+    if(!snap.exists || snap.metadata.hasPendingWrites || CLOUD.dirty) return;
+    CLOUD.applying=true;
+    try{ cloudApplyDoc(snap.data()); } finally { CLOUD.applying=false; }   // try/finally: a throw must NOT leave applying stuck (would block all saves)
     persistLocal(); renderAll();
   }, e=>console.warn('snapshot error', e));
   // real-time images: add when a member uploads, REMOVE when anyone deletes (cross-device)
   CLOUD.db.collection('images').onSnapshot(snap=>{
     CLOUD.applying=true;
+    try{
     snap.docChanges().forEach(ch=>{
       const im=ch.doc.data(); if(!im||!im.id) return;
       if(im.projk){                                      // PROJECT image (block diagram / schedule)
@@ -2762,7 +2775,7 @@ async function cloudEnter(){                         // load once + subscribe to
         if(ch.type==='removed'){ CLOUD.upImgs.delete(im.id);
           if(CLOUD.imgsByProj[im.projk]) CLOUD.imgsByProj[im.projk]=CLOUD.imgsByProj[im.projk].filter(x=>x.id!==im.id);
           if(m&&m.images) m.images=m.images.filter(x=>x.id!==im.id);
-        } else { CLOUD.upImgs.add(im.id); const obj={id:im.id,data:im.data,w:im.w,h:im.h,title:im.title||''};
+        } else { CLOUD.upImgs.add(im.id); const obj={id:im.id,data:im.data,w:im.w,h:im.h,title:im.title||'',folder:im.folder||''};
           const arr=(CLOUD.imgsByProj[im.projk]=CLOUD.imgsByProj[im.projk]||[]); const ai=arr.findIndex(x=>x.id===im.id); if(ai>=0)arr[ai]=obj; else arr.push(obj);
           if(m){ m.images=m.images||[]; const pi=m.images.findIndex(x=>x.id===im.id); if(pi>=0)m.images[pi]=obj; else m.images.push(obj); }
         }
@@ -2781,7 +2794,7 @@ async function cloudEnter(){                         // load once + subscribe to
         if(t){ t.images=t.images||[]; const ti=t.images.findIndex(x=>x.id===im.id); if(ti>=0) t.images[ti]=obj; else t.images.push(obj); }
       }
     });
-    CLOUD.applying=false;
+    } finally { CLOUD.applying=false; }
     persistLocal(); renderAll();
   }, e=>console.warn('image snapshot error', e));
   CLOUD.ready=true;
