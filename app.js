@@ -1563,6 +1563,15 @@ function assemblePptx(memberIds){
     const cols=['Project', key==='cur'?'Job & Issue':'Plan', 'Due date', 'Status'];
     const head=cols.map(t=>({text:t,options:{bold:true,color:'FFFFFF',fill:{color:PPT.navy},fontSize:HFONT,valign:'middle',align:(t==='Due date'||t==='Status')?'center':'left'}}));
     const rows=[head];
+    if(!chunk.length){                          // keep the table shape even with no content
+      const w={color:'FFFFFF'};
+      rows.push([
+        {text:'—', options:{color:PPT.gray,fontSize:TFONT,valign:'middle',fill:w}},
+        {text:(key==='next'?'（無下週計畫）':'（無本週工作）'), options:{italic:true,color:PPT.gray,fontSize:TFONT,valign:'middle',fill:w}},
+        {text:'—', options:{color:PPT.gray,fontSize:TFONT,align:'center',valign:'middle',fill:w}},
+        {text:'—', options:{color:PPT.gray,fontSize:TFONT,align:'center',valign:'middle',fill:w}}
+      ]);
+    }
     chunk.forEach((gp,idx)=>{ const st=groupStatus(gp), bg={color: idx%2?'F1F5FB':'FFFFFF'};
       rows.push([
         {text:gp.label, options:{bold:true,color:PPT.navy,fontSize:TFONT,valign:'top',fill:bg}},
@@ -1594,7 +1603,13 @@ function assemblePptx(memberIds){
     let s=null, y=0, started=false;
     const newSlide=()=>{ s=pptx.addSlide(); header(s,name,role, started?'(續) cont.':''); started=true; y=1.5; };
     function section(label, rowsG, key){
-      if(!rowsG.length) return;
+      if(!rowsG.length){                                      // always show the section (empty = placeholder)
+        if(!s || y+0.46+HEAD_H+0.45 > MAXY) newSlide();
+        sectionLabel(s,label,y); y+=0.46;
+        buildTable(s, y, key, []);
+        y += HEAD_H + 0.42 + 0.32;
+        return;
+      }
       let i=0;
       while(i<rowsG.length){
         const firstH=estRowH(rowsG[i][key]);
