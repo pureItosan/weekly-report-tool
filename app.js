@@ -2198,6 +2198,7 @@ async function cloudEnter(){                         // load once + subscribe to
   CLOUD.ready=true;
   renderAll();
   if(!existed) cloudSave();                          // empty cloud -> seed from this device
+  cloudSaveImages();                                 // push any local-only images up (e.g. uploaded before image-sync existed)
 }
 function applyRoleUI(){
   document.body.classList.toggle('role-member', !!(CLOUD.me && !CLOUD.me.admin));
