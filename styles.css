@@ -187,6 +187,17 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--accent)}
 .pimg-item{position:relative;display:inline-block}
 .pimg-item img{max-width:240px;max-height:200px;border:1px solid var(--line);border-radius:8px;cursor:zoom-in;background:#fff}
 .pimg-item .img-del{position:absolute;top:4px;right:4px}
+.pimg-cap{font-size:11px;color:var(--muted);text-align:center;margin-top:3px;max-width:240px}
+/* design documents library */
+.dd-upload{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:6px}
+.dd-upload select,.dd-upload input{width:auto;min-width:160px}
+.dd-upload input{flex:1 1 240px}
+.dd-group{margin-top:16px}
+.dd-group h3{font-size:14px;color:var(--accent);border-bottom:1px solid var(--line);padding-bottom:5px;margin-bottom:8px}
+/* schedule attach row */
+.sched-attach{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.sched-refs{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px}
+.sched-refs .pimg-item img{max-width:200px;max-height:130px}
 
 /* secondary role badge + two selects */
 .role-badge.sub{opacity:.72;font-weight:600}
