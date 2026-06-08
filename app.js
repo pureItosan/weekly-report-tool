@@ -881,6 +881,8 @@ function memberNarrative(name, list){
   let out='*'+name+'\n';
   const cur=list.filter(t=>t.current), nexts=list.filter(t=>t.next);
   if(!cur.length && !nexts.length) return out+'Pending input — no items reported this week.\n\n';
+  const sh=projShares(list);
+  out+='This week: [ '+sh.list.map(o=>`${o.label} - ${o.pct}%`).join(' | ')+' ]\n';   // per-member project breakdown (kept)
   cur.forEach((t,i)=>{
     out+=`${i+1}. ${lbl(t)}: ${rewriteProfessional(t.current)}\n`;
     out+=`   Status: ${statusWord(t)} | risk ${(t.risk||'M')[0]} | Due Date: ${t.due||'TBC'}\n`;
@@ -1896,6 +1898,8 @@ function memberReportXml(name, list, mediaCollector){
   if(!list.length){ body+=P('Pending input — no items reported this week.',{color:'B5790F'}); body+=P('',{}); return body; }
   const plabel=t=>t.projectLabel||shortProj(t.project);
   const cur=list.filter(t=>t.current);
+  const sh=projShares(list);
+  body+=P('This week: [ '+sh.list.map(o=>`${o.label} - ${o.pct}%`).join(' | ')+' ]',{bold:true});   // per-member project breakdown (kept)
   cur.forEach((t,i)=>{
     body+=P(`${i+1}. ${plabel(t)}: ${rewriteProfessional(t.current)}`,{indent:200});
     body+=P(`Status: ${statusWord(t)} | risk ${(t.risk||'M')[0]} | Due Date: ${t.due||'TBC'}`,{indent:540,color:'444C5C'});
