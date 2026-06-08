@@ -10,6 +10,7 @@ html=read('index.html')
 css=read('styles.css')
 jszip=read('vendor/jszip.min.js')
 xlsx=read('vendor/xlsx.full.min.js')
+pptx=read('vendor/pptxgen.bundle.js')
 app=read('app.js')
 
 def safe(js):  # avoid premature </script> termination
@@ -23,6 +24,8 @@ html=html.replace('<script src="vendor/jszip.min.js"></script>',
                   '<script>'+safe(jszip)+'</script>')
 html=html.replace('<script src="vendor/xlsx.full.min.js"></script>',
                   '<script>'+safe(xlsx)+'</script>')
+html=html.replace('<script src="vendor/pptxgen.bundle.js"></script>',
+                  '<script>'+safe(pptx)+'</script>')
 html=html.replace('<script src="app.js"></script>',
                   '<script>'+safe(app)+'</script>')
 

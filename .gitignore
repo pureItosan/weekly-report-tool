@@ -8,6 +8,11 @@
 # Local dev / preview config
 .claude/
 
+# Dev preview artifacts — renders of real reports, never commit
+_preview_png/
+*.png
+save_server.py
+
 # OS junk
 Thumbs.db
 .DS_Store

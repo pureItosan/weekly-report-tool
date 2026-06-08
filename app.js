@@ -361,6 +361,7 @@ async function parsePPTX(file){
   const out=[];
   tableSlides=[];                          // slide numbers that have a real table (= person section boundary)
   let lastTaskIdxBySlide=-1, lastTaskSlide=-1, lastSectionStart=0;
+  const lastSlideNo = slidePaths.length ? +String(slidePaths[slidePaths.length-1]).match(/slide(\d+)/)[1] : 0;
   for(const sp of slidePaths){
     const xml=await zip.file(sp).async('string');
     const doc=new DOMParser().parseFromString(xml,'application/xml');
@@ -372,6 +373,10 @@ async function parsePPTX(file){
     let slideReporter='';
     const rm=joinedText.match(/reporter\s*[:：]\s*([A-Za-z][\w.]*(?:\s*[\/&,]\s*[A-Za-z][\w.]*)*)/i);
     if(rm) slideReporter=rm[1].trim();
+    // closing / divider slide (Thank You, 感謝聆聽, The End…) — its decorative image must NOT
+    // be attached to the last member's section.
+    const isClosing = /thank\s*you|感謝聆聽|感謝指教|敬請指教|簡報結束|the\s+end|q\s*&\s*a/i.test(joinedText)
+      || (slideNo===lastSlideNo && joinedText.replace(/\s/g,'').length<30);
 
     // ---- images on this slide (keep an original-URL for hi-res OCR if needed) ----
     const relPath=sp.replace(/slides\/(slide\d+)\.xml/,'slides/_rels/$1.xml.rels');
@@ -431,11 +436,15 @@ async function parsePPTX(file){
       tableSlides.push(slideNo);              // a new person's section starts here
     } else if(images.length){
       const big=images.some(im=>(im.w||0)>=360 && (im.h||0)>=150);
-      // (a) detail/analysis page right after a member's report -> attach to ONE of that member's tasks (storage-light)
-      if(lastTaskSlide>=0 && (slideNo-lastTaskSlide)<=4 && out[lastSectionStart]){
-        out[lastSectionStart]._images=(out[lastSectionStart]._images||[]).concat(images);
-      } else if(!big && lastTaskIdxBySlide>=0){
-        out[lastTaskIdxBySlide]._images=(out[lastTaskIdxBySlide]._images||[]).concat(images);
+      // (a) detail/analysis page right after a member's report -> attach to ONE of that member's tasks
+      //     (storage-light). Skipped for closing/divider slides so the deck's "Thank You" page
+      //     never lands inside the last member's section.
+      if(!isClosing){
+        if(lastTaskSlide>=0 && (slideNo-lastTaskSlide)<=4 && out[lastSectionStart]){
+          out[lastSectionStart]._images=(out[lastSectionStart]._images||[]).concat(images);
+        } else if(!big && lastTaskIdxBySlide>=0){
+          out[lastTaskIdxBySlide]._images=(out[lastTaskIdxBySlide]._images||[]).concat(images);
+        }
       }
       // (b) ANY big single image might be a PASTED REPORT -> keep a hi-res OCR placeholder; OCR decides
       //     (if OCR finds "Reporter: X" -> creates X's tasks; otherwise placeholder is just dropped)
@@ -1296,6 +1305,224 @@ function memberReportXml(name, list, mediaCollector){
   return body;
 }
 
+/* =====================================================================
+   PPTX EXPORT — fixed-layout deck styled like the company 6G deck
+   (navy + teal, white cards w/ cyan accent, Arial). Same content model
+   as the Word export so PPT and Word stay aligned.
+   ===================================================================== */
+const PPT = {
+  // company palette pulled from the 6G deck
+  navy:'1A3B79', dark:'1E2C3A', deep:'0C2340', blue:'2E5AAC',
+  teal:'0E8597', cyan:'15B5CC', gray:'5E6B7A', tint:'EAF1FB',
+  white:'FFFFFF', card:'F8FAFC', track:'E6ECF5', line:'D8E0EC',
+  green:'10B981', amber:'F59E0B', font:'Arial', fontB:'Arial Black'
+};
+function pptPlabel(t){ return t.projectLabel||shortProj(t.project); }
+function progColor(p){ return p>=100?PPT.green : p>=70?PPT.blue : p>=34?PPT.cyan : PPT.amber; }
+function collectImages(list){
+  const out=[], seen=new Set();
+  (list||[]).forEach(t=>(t.images||[]).forEach(im=>{
+    const k=im&&(im.id||im.data); if(im&&im.data&&!seen.has(k)){ seen.add(k); out.push(im); }
+  }));
+  return out;
+}
+/* keep technical RD3 text VERBATIM — only fix mojibake & strip leading bullet/number */
+function cleanRptLine(s){
+  return String(s||'')
+    .replace(/à/g,'→').replace(/â€™/g,"'").replace(/â†'/g,'→')
+    .replace(/^\s*(?:[-–•*]|\d+[.)])\s*/,'')
+    .replace(/[ \t]+/g,' ').trim();
+}
+function splitRptLines(text){
+  return String(text||'').split(/\r?\n/).map(cleanRptLine).filter(Boolean);
+}
+function rptMarkerColor(inner){
+  const s=String(inner).toLowerCase();
+  if(/(fail|disqualif|block|crash|overdue|error|reject|defect|\bn\/?g\b)/.test(s)) return 'E5484D';
+  if(/(done|closed|pass|qualif|verified|finish|complete|\bok\b)/.test(s))          return PPT.green;
+  if(/(on-?going|ongoing|pending|progress|wip|tbd|wait)/.test(s))                  return PPT.amber;
+  return null;
+}
+/* split a line into runs so status markers like (Done)/(On-going) get colored */
+function rptMarkerRuns(line){
+  const parts=[]; let last=0, mm; const re=/\(([^)]{1,40})\)/g;
+  while((mm=re.exec(line))){
+    if(mm.index>last) parts.push({text:line.slice(last,mm.index)});
+    const col=rptMarkerColor(mm[1]);
+    parts.push({text:mm[0], options: col?{color:col,bold:true}:null});
+    last=mm.index+mm[0].length;
+  }
+  if(last<line.length) parts.push({text:line.slice(last)});
+  return parts.length?parts:[{text:line}];
+}
+function rptEstLines(s){ return Math.max(1, Math.ceil(s.length/118)); }
+
+function assemblePptx(memberIds){
+  if(typeof PptxGenJS==='undefined'){ toast('PPTX 函式庫未載入'); return null; }
+  const {map,unassigned}=buildBuckets();
+  const targets = memberIds&&memberIds.length
+    ? members.filter(m=>memberIds.includes(m.id)) : members.slice();
+  if(!targets.length){ toast('沒有成員可匯出'); return null; }
+  const date=new Date().toISOString().slice(0,10);
+
+  const pptx=new PptxGenJS();
+  pptx.defineLayout({name:'WIDE', width:13.33, height:7.5});
+  pptx.layout='WIDE';
+  pptx.author='Weekly Report Hub'; pptx.company='RD'; pptx.title='Weekly Report '+date;
+  const R=pptx.ShapeType.rect, RR=pptx.ShapeType.roundRect;
+
+  // ---- shared chrome --------------------------------------------------
+  function header(s, name, role, tag){
+    s.background={color:PPT.white};
+    s.addShape(R,{x:0.7,y:0.34,w:0.14,h:0.14,fill:{color:PPT.cyan}});
+    s.addText(`WEEKLY REPORT  ｜  ${date}`,
+      {x:0.95,y:0.26,w:9,h:0.3,fontSize:11,bold:true,color:PPT.teal,fontFace:PPT.font,charSpacing:2});
+    s.addText([
+      {text:name,options:{bold:true,color:PPT.dark,fontFace:PPT.fontB}},
+      role?{text:'   '+role,options:{color:PPT.teal,fontSize:15,bold:true,fontFace:PPT.font}}:{text:''}
+    ],{x:0.7,y:0.6,w:10.6,h:0.64,fontSize:28,fontFace:PPT.fontB,valign:'middle'});
+    if(tag) s.addText(tag,{x:10.8,y:0.72,w:1.83,h:0.36,fontSize:12,bold:true,color:PPT.gray,fontFace:PPT.font,align:'right',valign:'middle'});
+    s.addShape(R,{x:0.7,y:1.4,w:11.93,h:0.022,fill:{color:PPT.line}});
+    s.addText('Weekly Report Hub · '+date,{x:0.7,y:7.06,w:11.93,h:0.3,fontSize:8,color:PPT.gray,fontFace:PPT.font,align:'right'});
+  }
+  function sectionLabel(s, text, y){
+    s.addShape(R,{x:0.7,y:y+0.04,w:0.12,h:0.22,fill:{color:PPT.cyan}});
+    s.addText(text,{x:0.92,y,w:11.7,h:0.3,fontSize:13,bold:true,color:PPT.navy,fontFace:PPT.font,charSpacing:1});
+  }
+  // collect ALL of a member's tasks for one project into a single task-card model
+  function groupAllByProject(list){
+    const order=[], g=new Map();
+    (list||[]).forEach(t=>{
+      const key=pptPlabel(t);
+      if(!g.has(key)){ g.set(key,{label:key,cur:[],next:[],progs:[],high:false,due:'',imgs:[],seen:new Set()}); order.push(key); }
+      const o=g.get(key);
+      if(String(t.current||'').trim()) splitRptLines(t.current).forEach(l=>o.cur.push(l));
+      if(String(t.next||'').trim()) splitRptLines(t.next).forEach(l=>o.next.push(l));
+      if(typeof t.progress==='number') o.progs.push(t.progress);
+      if(!o.due && String(t.due||'').trim()) o.due=String(t.due).trim();
+      if(t.risk==='High') o.high=true;
+      (t.images||[]).forEach(im=>{ const k=im&&(im.id||im.data); if(im&&im.data&&!o.seen.has(k)){ o.seen.add(k); o.imgs.push(im); } });
+    });
+    return order.map(k=>g.get(k));
+  }
+  function groupStatus(g){
+    const txt=g.cur.concat(g.next).join(' ').toLowerCase();
+    const maxp=g.progs.length?Math.max.apply(null,g.progs):0;
+    if(g.high || /\b(blocked|blocker|stuck|crash|overdue)\b/.test(txt))                return {text:'At risk',color:'E5484D'};
+    if(/\b(pending|waiting|tbd)\b/.test(txt) || /on hold/.test(txt))                   return {text:'Pending',color:PPT.amber};
+    if(/\b(on-?going|ongoing|in progress|wip)\b/.test(txt))                            return {text:'In-progress',color:PPT.teal};
+    if(!g.next.length && (maxp>=100 || /\b(done|closed|completed)\b/.test(txt)))        return {text:'Done',color:PPT.green};
+    return {text:'In-progress',color:PPT.teal};
+  }
+  // shared table geometry so EVERY table (this-week / next-week / every member)
+  // has identical column widths and styling — neat & consistent (等寬).
+  const COLW=[1.95,6.78,1.3,1.9];          // Project | Job & Issue | Due date | Status  (=11.93)
+  const TFONT=11, HFONT=12, CPCELL=88;     // bigger, clearer font
+  const MAXY=6.9;                          // bottom limit for content before a new slide
+  // table cell → bulleted runs, status markers coloured, technical text verbatim
+  function cellRuns(lines){
+    const arr=(lines&&lines.length?lines:['—']).slice(0,10).map(l=>l.length>200?l.slice(0,197)+'…':l);
+    const runs=[];
+    arr.forEach(line=>{ const parts=rptMarkerRuns(line);
+      parts.forEach((p,i)=>runs.push({text:(i===0?'• ':'')+p.text, options:{
+        color:(p.options&&p.options.color)||PPT.dark, bold:!!(p.options&&p.options.bold),
+        breakLine:i===parts.length-1 }})); });
+    return runs;
+  }
+  function estRowH(lines){
+    const c=(lines&&lines.length?lines:['—']).slice(0,10)
+      .reduce((a,l)=>a+Math.max(1,Math.ceil(Math.min(l.length,200)/CPCELL)),0);
+    return c*0.235 + 0.2;
+  }
+  // one image card (white card, cyan top, contained image, caption)
+  function imgCard(s,x,y,w,h,im,n){
+    s.addShape(RR,{x,y,w,h,rectRadius:0.05,fill:{color:PPT.white},line:{color:PPT.line,width:1}});
+    s.addShape(R,{x,y,w,h:0.06,fill:{color:PPT.cyan}});
+    try{ s.addImage({data:im.data,x:x+0.15,y:y+0.2,w:w-0.3,h:h-0.55,sizing:{type:'contain',w:w-0.3,h:h-0.55}}); }catch(e){}
+    s.addText('圖 '+n,{x:x+0.15,y:y+h-0.32,w:w-0.3,h:0.26,fontSize:10,color:PPT.gray,fontFace:PPT.font});
+  }
+  // member's images → ONE big image per slide
+  function attachPages(name, role, imgs){
+    imgs.forEach((im,i)=>{
+      const s=pptx.addSlide(); header(s,name,role,'附件 attachments');
+      sectionLabel(s,'ATTACHMENTS  ｜  Issue 圖片 / 量測',1.55);
+      imgCard(s,0.9,1.98,11.53,4.9,im,i+1);
+    });
+  }
+  // build ONE table (header + the given rows) at vertical position `top`
+  function buildTable(s, top, key, chunk){
+    const cols=['Project', key==='cur'?'Job & Issue':'Plan', 'Due date', 'Status'];
+    const head=cols.map(t=>({text:t,options:{bold:true,color:'FFFFFF',fill:{color:PPT.navy},fontSize:HFONT,valign:'middle',align:(t==='Due date'||t==='Status')?'center':'left'}}));
+    const rows=[head];
+    chunk.forEach((gp,idx)=>{ const st=groupStatus(gp), bg={color: idx%2?'F1F5FB':'FFFFFF'};
+      rows.push([
+        {text:gp.label, options:{bold:true,color:PPT.navy,fontSize:TFONT,valign:'top',fill:bg}},
+        {text:cellRuns(gp[key]), options:{valign:'top',fill:bg}},
+        {text:gp.due||'—', options:{color:PPT.gray,fontSize:TFONT,align:'center',valign:'middle',fill:bg}},
+        {text:st.text, options:{bold:true,color:st.color,fontSize:TFONT,align:'center',valign:'middle',fill:bg}}
+      ]);
+    });
+    s.addTable(rows,{x:0.7,y:top,w:11.93,colW:COLW,border:{type:'solid',color:'D8E0EC',pt:0.5},
+      fontFace:PPT.font,fontSize:TFONT,valign:'top',autoPage:false,margin:[5,6,5,6]});
+  }
+
+  // ---- render one member: This-week table, then Next-week table BELOW it on the
+  //      same slide (flowing to a new slide only when it runs out of room), then
+  //      one-big-image attachment pages.
+  function renderMember(name, role, list){
+    const groups=groupAllByProject(list);
+    const thisRows=groups.filter(g=>g.cur.length);
+    const nextRows=groups.filter(g=>g.next.length);
+    const imgs=collectImages(list);
+    if(!thisRows.length && !nextRows.length && !imgs.length){
+      const s=pptx.addSlide(); header(s,name,role,'');
+      s.addShape(RR,{x:3.0,y:2.95,w:7.33,h:1.5,rectRadius:0.1,fill:{color:PPT.tint},line:{color:PPT.line,width:1}});
+      s.addText('Pending input',{x:3.0,y:3.12,w:7.33,h:0.5,fontSize:20,bold:true,color:PPT.navy,fontFace:PPT.font,align:'center'});
+      s.addText('本週尚未提供工作內容',{x:3.0,y:3.66,w:7.33,h:0.5,fontSize:13,color:PPT.gray,fontFace:PPT.font,align:'center'});
+      return;
+    }
+    const HEAD_H=0.34;
+    let s=null, y=0, started=false;
+    const newSlide=()=>{ s=pptx.addSlide(); header(s,name,role, started?'(續) cont.':''); started=true; y=1.5; };
+    function section(label, rowsG, key){
+      if(!rowsG.length) return;
+      let i=0;
+      while(i<rowsG.length){
+        const firstH=estRowH(rowsG[i][key]);
+        if(!s || y+0.46+HEAD_H+firstH > MAXY) newSlide();    // room for label + header + 1 row
+        sectionLabel(s,label,y); y+=0.46;
+        const top=y; let used=HEAD_H; const chunk=[];
+        while(i<rowsG.length){
+          const h=estRowH(rowsG[i][key]);
+          if(chunk.length && top+used+h > MAXY) break;
+          chunk.push(rowsG[i]); used+=h; i++;
+        }
+        buildTable(s, top, key, chunk);
+        y = top + used + 0.32;                                // gap before next section
+      }
+    }
+    newSlide();
+    section('THIS WEEK  ｜  本週工作', thisRows, 'cur');
+    section('NEXT WEEK  ｜  下週計畫', nextRows, 'next');
+    attachPages(name,role,imgs);
+  }
+
+  targets.forEach(m=>renderMember(m.name,[m.role,m.role2].filter(Boolean).join(' · '),map.get(m.id)||[]));
+  if((!memberIds||!memberIds.length) && unassigned.length)
+    renderMember('Unassigned','',unassigned);
+
+  const fname=(memberIds&&memberIds.length===1?memberName(memberIds[0]):'AllMembers')+
+    '_WeeklyReport_'+date+'.pptx';
+  return {pptx, fname};
+}
+
+async function buildPptx(memberIds){
+  const r=assemblePptx(memberIds); if(!r) return;
+  try{ await r.pptx.writeFile({fileName:r.fname}); }
+  catch(e){ const blob=await r.pptx.write({outputType:'blob'}); downloadBlob(blob,r.fname); }
+  toast('已匯出 '+r.fname);
+}
+
 async function exportWord(memberIds){
   const {map,unassigned}=buildBuckets();
   const targets = memberIds && memberIds.length
@@ -1604,6 +1831,7 @@ function wireEvents(){
   $('#clearFiltersBtn').addEventListener('click', ()=>{ filters.q='';filters.project='';filters.member='';filters.status='';filters.role='';filters.hideEmpty=false; $('#filterQ').value=''; renderAll(); });
   $('#openWorkbenchBtn').addEventListener('click', openWorkbench);
   $('#exportAllBtn').addEventListener('click', ()=>exportWord(null));
+  $('#exportPptxBtn').addEventListener('click', ()=>buildPptx(null));
   $('#ocrReportsBtn').addEventListener('click', ocrAllReports);
   $('#previewBtn').addEventListener('click', openNarrative);
   $('#narrMember').addEventListener('change', renderNarrative);
@@ -1711,7 +1939,7 @@ function renderNarrative(){
 
 /* expose for testing */
 window.WRT={ get members(){return members;}, get tasks(){return tasks;}, get batches(){return batches;},
-  parsePPTX, importFiles, addMembers, parseMemberText, overlayTasks, exportWord, resolveOwners, matchOwner,
+  parsePPTX, importFiles, addMembers, parseMemberText, overlayTasks, exportWord, buildPptx, assemblePptx, resolveOwners, matchOwner,
   autoAddFromReport, reresolveAllTasks, buildNarrative, projKeyOf, applyProjAliases, openProject, openNarrative,
   projectGroups, editTaskField, addTaskOwner, removeTaskOwner, ensureTesseract, ocrImages, ocrReportToTasks, ocrTask, setMemberRole, setMemberRole2,
   navStat, mergeProjects, resolveProjk, ocrAllReports, dedupeTasks, cleanupGarbledMembers, snapName, get pendingReports(){return pendingReports;}, convertOcrRows,
