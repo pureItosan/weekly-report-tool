@@ -881,13 +881,10 @@ function memberNarrative(name, list){
   let out='*'+name+'\n';
   const cur=list.filter(t=>t.current), nexts=list.filter(t=>t.next);
   if(!cur.length && !nexts.length) return out+'Pending input — no items reported this week.\n\n';
-  const sh=projShares(list);
-  out+='Project share (by task count): [ '+sh.list.map(o=>`${o.label} - ${o.pct}%`).join(' | ')+' ]\n';
   cur.forEach((t,i)=>{
     out+=`${i+1}. ${lbl(t)}: ${rewriteProfessional(t.current)}\n`;
-    out+=`   Status: ${statusWord(t)} | project share ${sh.share(t)}% | risk ${(t.risk||'M')[0]} | complexity ${t.complexity||'Medium'}\n`;
+    out+=`   Status: ${statusWord(t)} | risk ${(t.risk||'M')[0]} | Due Date: ${t.due||'TBC'}\n`;
     if(t.shared) out+=`   Shared owner: ${(t.ownerIds||[]).map(memberName).join(', ')}\n`;
-    if(t.images&&t.images.length) out+=`   Attachments: ${t.images.length} image(s)\n`;
   });
   if(nexts.length){ out+='Next week:\n'; nexts.forEach((t,i)=>{ out+=`${i+1}. ${lbl(t)}: ${rewriteProfessional(t.next)}\n`; }); }
   return out+'\n';
@@ -1899,22 +1896,14 @@ function memberReportXml(name, list, mediaCollector){
   if(!list.length){ body+=P('Pending input — no items reported this week.',{color:'B5790F'}); body+=P('',{}); return body; }
   const plabel=t=>t.projectLabel||shortProj(t.project);
   const cur=list.filter(t=>t.current);
-  // project "progress" = each project's share of the member's total tasks (sums to 100%)
-  const sh=projShares(list);
-  const summary='[ '+sh.list.map(o=>`${o.label} - ${o.pct}%`).join(' | ')+' ]';
-  body+=P('Project share (by task count): '+summary,{bold:true});
   cur.forEach((t,i)=>{
     body+=P(`${i+1}. ${plabel(t)}: ${rewriteProfessional(t.current)}`,{indent:200});
-    body+=P(`Status: ${statusWord(t)} | project share ${sh.share(t)}% | risk ${(t.risk||'M')[0]} | complexity ${t.complexity||'Medium'}`,{indent:540,color:'444C5C'});
+    body+=P(`Status: ${statusWord(t)} | risk ${(t.risk||'M')[0]} | Due Date: ${t.due||'TBC'}`,{indent:540,color:'444C5C'});
     // lean: only surface analysis when there is a real risk/blocker
     if(t.risk==='High' || /block|defect|timeout|fail|overdue|debug/i.test(t.current||''))
       body+=P('Analysis: '+(t.analysis||generateAnalysis(t)),{indent:540,color:'6B7A92'});
     if(t.shared) body+=P('Shared owner: '+(t.ownerIds||[]).map(memberName).join(', '),{indent:540,color:'1A7A8A'});
     if(t.delta) body+=P('Weekly delta: '+t.delta,{indent:540,color:'B5790F'});
-    if(t.images&&t.images.length){
-      body+=P(`Attachments: ${t.images.length} image(s)`,{indent:540,color:'6B7A92'});
-      t.images.forEach(im=>{ const rid=mediaCollector(im.data); if(rid) body+=wpDrawing(rid,im); });
-    }
   });
   // Next week
   const nexts=list.filter(t=>t.next);
