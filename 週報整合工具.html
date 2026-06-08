@@ -14,7 +14,8 @@
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}   /* must win over .modal-overlay/.lightbox display:flex */
-body{margin:0;font-family:"Segoe UI",system-ui,"Microsoft JhengHei",sans-serif;
+body{margin:0;height:100vh;display:flex;flex-direction:column;overflow:hidden;
+  font-family:"Segoe UI",system-ui,"Microsoft JhengHei",sans-serif;
   background:radial-gradient(1200px 600px at 20% -10%, #18243a 0%, var(--bg) 55%) fixed, var(--bg);
   color:var(--text);font-size:14px;line-height:1.5}
 ::selection{background:var(--accent);color:#06101f}
@@ -46,8 +47,16 @@ code{background:#0c1118;padding:1px 5px;border-radius:5px;color:var(--accent2);f
 .icon-btn:hover{color:var(--text)}
 
 /* layout */
-.layout{display:grid;grid-template-columns:320px 1fr;gap:16px;padding:16px;align-items:start}
-.sidebar{display:flex;flex-direction:column;gap:16px;position:sticky;top:72px}
+.layout{display:grid;grid-template-columns:320px 1fr;gap:16px;padding:16px;
+  flex:1;min-height:0;overflow:hidden}                       /* fill viewport; columns scroll on their own */
+.sidebar{display:flex;flex-direction:column;gap:16px;min-height:0;overflow-y:auto;padding-right:6px}
+.sidebar>*{flex:none}                                        /* panels keep their height -> sidebar scrolls */
+.main{min-height:0;overflow-y:auto;padding-right:6px}        /* report column scrolls independently */
+.member-chips .mname{cursor:pointer}
+.member-chips .mname:hover{color:var(--accent);text-decoration:underline}
+.member-block.flash{animation:flashHL 1.5s ease-out}
+@keyframes flashHL{0%,16%{box-shadow:0 0 0 2px var(--accent),0 0 22px rgba(90,162,255,.55)}
+  100%{box-shadow:0 0 0 0 transparent}}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
   padding:14px;box-shadow:var(--shadow)}
 .panel h2{font-size:15px;display:flex;align-items:center;gap:8px;margin-bottom:8px}
@@ -337,7 +346,12 @@ label.check input{width:auto}
   border:1px solid var(--accent);color:var(--text);padding:11px 18px;border-radius:10px;
   z-index:90;box-shadow:var(--shadow);font-size:13px}
 
-@media(max-width:920px){.layout{grid-template-columns:1fr}.sidebar{position:static}.charts{grid-template-columns:1fr}.form-grid{grid-template-columns:1fr}}
+@media(max-width:920px){
+  body{height:auto;overflow:auto;display:block}              /* mobile: one normal page scroll */
+  .layout{grid-template-columns:1fr;flex:none;min-height:0;overflow:visible}
+  .sidebar{position:static;overflow:visible}
+  .main{overflow:visible}
+  .charts{grid-template-columns:1fr}.form-grid{grid-template-columns:1fr}}
 
 </style>
 </head>
@@ -1651,7 +1665,30 @@ function memberBlock(name, list, isUnassigned, mid){
     ${list.length?'':'<span class="pending">Pending input</span>'}
     ${mid?`<button class="btn sm add-task-btn" data-addtask="${mid}">＋ 新增任務</button>`:''}</div>${strip}`;
   const cards=list.length? `<div class="task-grid">${list.map(taskCard).join('')}</div>` : '';
-  return `<div class="member-block">${head}${cards}</div>`;
+  return `<div class="member-block" id="mblock-${mid||'unassigned'}">${head}${cards}</div>`;
+}
+// clicking a member in the left list jumps to their report on the right (reveals + highlights)
+function jumpToMember(mid){
+  if(!mid) return;
+  setView('members');
+  if(filters.member && filters.member!==mid) filters.member='';
+  if(filters.hideEmpty){ filters.hideEmpty=false; const he=$('#hideEmptyChk'); if(he) he.checked=false; }
+  renderFilters(); renderMembersArea(); renderStats();
+  let block=document.getElementById('mblock-'+mid);
+  if(!block){ filters.role=''; filters.status=''; filters.q=''; const fq=$('#filterQ'); if(fq) fq.value=''; renderFilters(); renderMembersArea(); block=document.getElementById('mblock-'+mid); }
+  if(!block){ toast('找不到該成員的週報'); return; }
+  requestAnimationFrame(()=>{
+    const mn=document.querySelector('.main');
+    const desktop = mn && getComputedStyle(mn).overflowY!=='visible' && mn.scrollHeight>mn.clientHeight+4;
+    if(desktop){                                   // independent-scroll column -> scroll it directly to the top
+      const delta=block.getBoundingClientRect().top - mn.getBoundingClientRect().top;
+      mn.scrollTop = mn.scrollTop + delta - 12;
+    } else {                                        // mobile: normal page scroll
+      block.scrollIntoView({block:'start'});
+    }
+  });
+  block.classList.remove('flash'); void block.offsetWidth; block.classList.add('flash');
+  setTimeout(()=>{ const b=document.getElementById('mblock-'+mid); if(b) b.classList.remove('flash'); },1600);
 }
 function taskCard(t){
   const sharedTag=t.shared?`<span class="tag shared">Shared owner</span>`:'';
@@ -2421,6 +2458,7 @@ function wireEvents(){
     const t=e.target;
     if(t.closest('[data-close]')){ t.closest('.modal-overlay').hidden=true; return; }
     const navCard=t.closest('[data-nav]'); if(navCard){ navStat(navCard.dataset.nav, navCard.dataset.flt); return; }
+    if(t.closest('.mname') && t.closest('.mchip')){ jumpToMember(t.closest('.mchip').dataset.mid); return; }
     if(t.dataset.delMember){ deleteMember(t.dataset.delMember); return; }
     if(t.dataset.delTask){ deleteTask(t.dataset.delTask); $('#taskModal').hidden=true; return; }
     if(t.dataset.rmWb!==undefined){ wbImages.splice(+t.dataset.rmWb,1); renderWbThumbs(); return; }

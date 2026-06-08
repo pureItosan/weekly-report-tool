@@ -7,7 +7,8 @@
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}   /* must win over .modal-overlay/.lightbox display:flex */
-body{margin:0;font-family:"Segoe UI",system-ui,"Microsoft JhengHei",sans-serif;
+body{margin:0;height:100vh;display:flex;flex-direction:column;overflow:hidden;
+  font-family:"Segoe UI",system-ui,"Microsoft JhengHei",sans-serif;
   background:radial-gradient(1200px 600px at 20% -10%, #18243a 0%, var(--bg) 55%) fixed, var(--bg);
   color:var(--text);font-size:14px;line-height:1.5}
 ::selection{background:var(--accent);color:#06101f}
@@ -39,8 +40,16 @@ code{background:#0c1118;padding:1px 5px;border-radius:5px;color:var(--accent2);f
 .icon-btn:hover{color:var(--text)}
 
 /* layout */
-.layout{display:grid;grid-template-columns:320px 1fr;gap:16px;padding:16px;align-items:start}
-.sidebar{display:flex;flex-direction:column;gap:16px;position:sticky;top:72px}
+.layout{display:grid;grid-template-columns:320px 1fr;gap:16px;padding:16px;
+  flex:1;min-height:0;overflow:hidden}                       /* fill viewport; columns scroll on their own */
+.sidebar{display:flex;flex-direction:column;gap:16px;min-height:0;overflow-y:auto;padding-right:6px}
+.sidebar>*{flex:none}                                        /* panels keep their height -> sidebar scrolls */
+.main{min-height:0;overflow-y:auto;padding-right:6px}        /* report column scrolls independently */
+.member-chips .mname{cursor:pointer}
+.member-chips .mname:hover{color:var(--accent);text-decoration:underline}
+.member-block.flash{animation:flashHL 1.5s ease-out}
+@keyframes flashHL{0%,16%{box-shadow:0 0 0 2px var(--accent),0 0 22px rgba(90,162,255,.55)}
+  100%{box-shadow:0 0 0 0 transparent}}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
   padding:14px;box-shadow:var(--shadow)}
 .panel h2{font-size:15px;display:flex;align-items:center;gap:8px;margin-bottom:8px}
@@ -330,4 +339,9 @@ label.check input{width:auto}
   border:1px solid var(--accent);color:var(--text);padding:11px 18px;border-radius:10px;
   z-index:90;box-shadow:var(--shadow);font-size:13px}
 
-@media(max-width:920px){.layout{grid-template-columns:1fr}.sidebar{position:static}.charts{grid-template-columns:1fr}.form-grid{grid-template-columns:1fr}}
+@media(max-width:920px){
+  body{height:auto;overflow:auto;display:block}              /* mobile: one normal page scroll */
+  .layout{grid-template-columns:1fr;flex:none;min-height:0;overflow:visible}
+  .sidebar{position:static;overflow:visible}
+  .main{overflow:visible}
+  .charts{grid-template-columns:1fr}.form-grid{grid-template-columns:1fr}}

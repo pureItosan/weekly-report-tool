@@ -1078,7 +1078,30 @@ function memberBlock(name, list, isUnassigned, mid){
     ${list.length?'':'<span class="pending">Pending input</span>'}
     ${mid?`<button class="btn sm add-task-btn" data-addtask="${mid}">＋ 新增任務</button>`:''}</div>${strip}`;
   const cards=list.length? `<div class="task-grid">${list.map(taskCard).join('')}</div>` : '';
-  return `<div class="member-block">${head}${cards}</div>`;
+  return `<div class="member-block" id="mblock-${mid||'unassigned'}">${head}${cards}</div>`;
+}
+// clicking a member in the left list jumps to their report on the right (reveals + highlights)
+function jumpToMember(mid){
+  if(!mid) return;
+  setView('members');
+  if(filters.member && filters.member!==mid) filters.member='';
+  if(filters.hideEmpty){ filters.hideEmpty=false; const he=$('#hideEmptyChk'); if(he) he.checked=false; }
+  renderFilters(); renderMembersArea(); renderStats();
+  let block=document.getElementById('mblock-'+mid);
+  if(!block){ filters.role=''; filters.status=''; filters.q=''; const fq=$('#filterQ'); if(fq) fq.value=''; renderFilters(); renderMembersArea(); block=document.getElementById('mblock-'+mid); }
+  if(!block){ toast('找不到該成員的週報'); return; }
+  requestAnimationFrame(()=>{
+    const mn=document.querySelector('.main');
+    const desktop = mn && getComputedStyle(mn).overflowY!=='visible' && mn.scrollHeight>mn.clientHeight+4;
+    if(desktop){                                   // independent-scroll column -> scroll it directly to the top
+      const delta=block.getBoundingClientRect().top - mn.getBoundingClientRect().top;
+      mn.scrollTop = mn.scrollTop + delta - 12;
+    } else {                                        // mobile: normal page scroll
+      block.scrollIntoView({block:'start'});
+    }
+  });
+  block.classList.remove('flash'); void block.offsetWidth; block.classList.add('flash');
+  setTimeout(()=>{ const b=document.getElementById('mblock-'+mid); if(b) b.classList.remove('flash'); },1600);
 }
 function taskCard(t){
   const sharedTag=t.shared?`<span class="tag shared">Shared owner</span>`:'';
@@ -1848,6 +1871,7 @@ function wireEvents(){
     const t=e.target;
     if(t.closest('[data-close]')){ t.closest('.modal-overlay').hidden=true; return; }
     const navCard=t.closest('[data-nav]'); if(navCard){ navStat(navCard.dataset.nav, navCard.dataset.flt); return; }
+    if(t.closest('.mname') && t.closest('.mchip')){ jumpToMember(t.closest('.mchip').dataset.mid); return; }
     if(t.dataset.delMember){ deleteMember(t.dataset.delMember); return; }
     if(t.dataset.delTask){ deleteTask(t.dataset.delTask); $('#taskModal').hidden=true; return; }
     if(t.dataset.rmWb!==undefined){ wbImages.splice(+t.dataset.rmWb,1); renderWbThumbs(); return; }
