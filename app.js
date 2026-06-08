@@ -40,6 +40,7 @@ let catalogMember = '';                            // catalog member filter
 let editingProj = '';                              // projk currently being edited
 let projCats = store.load('wrt_projcats', []);     // user-added project categories (beyond the built-ins)
 let catOpen  = store.load('wrt_catopen', null);    // {cat:true/false} remembered expand/collapse of category groups
+let catFilter = '';                                // '' = show all categories; else only show this category (tab filter)
 let autoAdd = store.load('wrt_autoadd', true);        // auto-create members from report owners
 let fuzzy   = store.load('wrt_fuzzy', true);          // allow nickname/typo/partial matching (default on)
 /* member GROUPS — named rosters that remember member order + roles + aliases.
@@ -74,7 +75,7 @@ function persistLocal(){
   try{ store.save(LS.batches, batches); }catch(e){ console.warn(e); }
   try{ store.save('wrt_idcode', idCodeMap); }catch(e){}
   try{ store.save('wrt_projalias', projAliases); }catch(e){}
-  try{ store.save('wrt_projmeta', projMeta); }catch(e){}
+  try{ store.save('wrt_projmeta', (typeof CLOUD!=='undefined'&&CLOUD.on)?projMetaNoImg():projMeta); }catch(e){}
   try{ store.save('wrt_deleted', deletedNames); }catch(e){}
   try{ store.save('wrt_projmerge', projMerge); }catch(e){}
   try{ store.save('wrt_projcats', projCats); }catch(e){}
@@ -1271,6 +1272,32 @@ function downloadSchedulePNG(){
     c.toBlob(b=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=((_schedEdit.title||'project')+'_schedule.png').replace(/[\\/:*?"<>|]/g,'_'); a.click(); }); };
   img.onerror=()=>{ URL.revokeObjectURL(url); toast('PNG 匯出失敗'); }; img.src=url;
 }
+/* ---------- PROJECT IMAGES (block diagram / architecture / original schedule), cloud-synced ---------- */
+let _pimgProjk=null;
+function openProjImages(projk){ _pimgProjk=projk; renderProjImages(); $('#projImgModal').hidden=false; }
+function renderProjImages(){
+  const projk=_pimgProjk, m=projMeta[projk]||{}, imgs=m.images||[];
+  const g=projectGroups().find(x=>x.projk===resolveProjk(projk));
+  $('#projImgInner').innerHTML=`
+    <div class="modal-head"><h2>🖼 ${esc(m.code||(g&&g.label)||projk)} · 附圖</h2><button class="icon-btn" data-close>✕</button></div>
+    <div class="modal-body">
+      <label class="btn sm primary">＋ 上傳圖片<input type="file" accept="image/*" multiple hidden data-paddimg="1"></label>
+      <p class="hint">可貼上系統方塊圖、架構圖，或你原本畫好的 Schedule 圖。點圖可放大；雲端會同步。</p>
+      <div class="pimg-grid">${imgs.length? imgs.map(im=>`<span class="pimg-item"><img src="${im.data}" data-light="${im.id}"><button class="img-del" data-pdelimg="${im.id}" title="刪除">✕</button></span>`).join('') : '<p class="hint">尚未附圖。</p>'}</div>
+    </div>
+    <div class="modal-foot"><button class="btn" data-close>關閉</button></div>`;
+}
+async function addProjectImages(projk, fileList){
+  const files=Array.from(fileList||[]).filter(f=>/^image\//.test(f.type)); if(!files.length) return;
+  const m=projMeta[projk]||{}; m.images=m.images||[];
+  for(const f of files){ const s=await shrinkImageBudget(await fileToDataURL(f), 2200); m.images.push({id:uid(), data:s.data, w:s.w, h:s.h}); }
+  projMeta[projk]=m; persist(); renderProjImages(); renderCatalog(); toast('已新增 '+files.length+' 張圖片');
+}
+function removeProjectImage(projk, id){
+  const m=projMeta[projk]; if(!m||!m.images) return;
+  if(!confirm('確定刪除這張圖片？刪除後無法復原。')) return;
+  m.images=m.images.filter(x=>x.id!==id); cloudDeleteImage(id); persist(); renderProjImages(); renderCatalog(); toast('已移除圖片');
+}
 function inferCategory(projStr){
   const s=String(projStr||'').toLowerCase();
   if(/dongle|\bdg\d|redcap/.test(s)) return 'Dongle';
@@ -1299,12 +1326,21 @@ function renderCatalog(){
   // group by Product Category; remember each group's expand/collapse so editing never makes the view jump
   const byCat={}; groups.forEach(g=>{ const c=projCategory(g); (byCat[c]=byCat[c]||[]).push(g); });
   const order=[...allCats(), ...Object.keys(byCat).filter(c=>!allCats().includes(c))];
+  if(catFilter && !byCat[catFilter]) catFilter='';            // selected tab emptied -> back to all
+  // tab bar: click a type to view only that category's projects
+  const tabCats=['', ...order.filter(c=>byCat[c])];
+  const tabBar=`<div class="cat-tabs">${tabCats.map(c=>{
+    const n=(c==='')?groups.length:byCat[c].length; const lbl=(c==='')?'全部':c;
+    return `<button class="cat-tab cat-${esc(c)} ${catFilter===c?'active':''}" data-catfilter="${esc(c)}">${esc(lbl)} <span class="ct-n">${n}</span></button>`;
+  }).join('')}</div>`;
   if(!catOpen){ catOpen={}; }                                  // first run: default open all except General/其他
   const editCat = editingProj ? projCategory(projectGroups().find(g=>g.projk===editingProj)||{}) : null;
-  cont.innerHTML = mgrBar + order.filter(c=>byCat[c]).map(c=>{
+  let showCats=order.filter(c=>byCat[c]);
+  if(catFilter) showCats=[catFilter];                          // tab selected -> only that category
+  cont.innerHTML = mgrBar + tabBar + showCats.map(c=>{
     const list=byCat[c]; const nTasks=list.reduce((s,g)=>s+g.tasks.length,0);
     const remembered = (c in catOpen) ? catOpen[c] : !(c==='General'||c==='其他');   // default state
-    const open = remembered || c===editCat;                   // keep the group you're editing open
+    const open = remembered || c===editCat || c===catFilter;  // keep the editing / filtered group open
     return `<details class="cat-group" data-cat="${esc(c)}" ${open?'open':''}>
       <summary class="cat-head"><span class="cat-name cat-${esc(c)}">${esc(c)}</span>
         <span class="cat-meta">${list.length} 專案 · ${nTasks} 任務</span></summary>
@@ -1351,6 +1387,7 @@ function catalogCard(g){
       <div class="pc-actions">
         ${phaseSel}
         <button class="btn sm" data-sched="${esc(g.projk)}" title="專案 Schedule 時間軸">📅${(meta.schedule&&(meta.schedule.items||[]).length)?' '+meta.schedule.items.length:''}</button>
+        <button class="btn sm" data-pimg="${esc(g.projk)}" title="附圖（方塊圖 / 架構圖 / Schedule）">🖼${(meta.images||[]).length?' '+meta.images.length:''}</button>
         ${merged?`<button class="btn sm" data-unmerge="${esc(g.projk)}" title="取消併入">↩ 取消併</button>`:''}
         <button class="btn sm" data-edit-proj="${esc(g.projk)}">${ed?'取消':'✎ Edit'}</button>
         <button class="btn sm danger" data-delproj="${esc(g.projk)}" title="刪除此專案">🗑</button>
@@ -2414,6 +2451,8 @@ function wireEvents(){
     if(t.dataset.unmerge!==undefined){ unmergeProject(t.dataset.unmerge); return; }
     if(t.dataset.delproj!==undefined){ deleteProjectGroup(t.dataset.delproj); return; }
     if(t.dataset.sched!==undefined){ openSchedule(t.dataset.sched); return; }
+    if(t.dataset.pimg!==undefined){ openProjImages(t.dataset.pimg); return; }
+    if(t.dataset.pdelimg!==undefined){ removeProjectImage(_pimgProjk, t.dataset.pdelimg); return; }
     if(t.dataset.sadd!==undefined){ addSchedItem(); return; }
     if(t.dataset.sdel!==undefined){ delSchedItem(t.dataset.sdel); return; }
     if(t.dataset.ssave!==undefined){ saveScheduleEdit(); return; }
@@ -2421,6 +2460,7 @@ function wireEvents(){
     if(t.dataset.addcat!==undefined){ const n=prompt('新增專案分類名稱：'); if(n) addCategory(n); return; }
     if(t.dataset.renamecat!==undefined){ const n=prompt('將分類「'+t.dataset.renamecat+'」改名為：', t.dataset.renamecat); if(n) renameCategory(t.dataset.renamecat, n); return; }
     if(t.dataset.delcat!==undefined){ deleteCategory(t.dataset.delcat); return; }
+    if(t.dataset.catfilter!==undefined){ catFilter=t.dataset.catfilter; renderCatalog(); return; }
     if(t.dataset.rmowner!==undefined){ const [tid,mid]=t.dataset.rmowner.split('|'); removeTaskOwner(tid,mid); return; }
     if(t.dataset.ocr!==undefined){ ocrTask(t.dataset.ocr); return; }
     if(t.dataset.opentask!==undefined){ openTask(t.dataset.opentask); return; }
@@ -2445,6 +2485,7 @@ function wireEvents(){
     if(el.dataset.setphase!==undefined){ setProjPhase(el.dataset.setphase, el.value); return; }
     if(el.dataset.si!==undefined && el.dataset.sf){ updSchedItem(el.dataset.si, el.dataset.sf, el.value); return; }
     if(el.dataset.smeta!==undefined){ updSchedMeta(el.dataset.smeta, el.value); return; }
+    if(el.dataset.paddimg!==undefined){ addProjectImages(_pimgProjk, el.files); el.value=''; return; }
     if(el.dataset.edit && el.dataset.tid){ editTaskField(el.dataset.tid, el.dataset.edit, el.value); return; }
     if(el.dataset.addowner){ addTaskOwner(el.dataset.addowner, el.value); el.value=''; return; }
   });
@@ -2525,6 +2566,7 @@ window.WRT={ get members(){return members;}, get tasks(){return tasks;}, get bat
    and images (separate `images` collection, one doc per image, live). Loop-safe
    via the `applying` flag + snapshot `hasPendingWrites`.
    ===================================================================== */
+function projMetaNoImg(){ const o={}; Object.keys(projMeta).forEach(k=>{ const c=Object.assign({},projMeta[k]); delete c.images; o[k]=c; }); return o; }
 function cloudSave(){
   if(!CLOUD.on || !CLOUD.ready || CLOUD.applying) return;
   clearTimeout(CLOUD.saveTimer);
@@ -2532,7 +2574,7 @@ function cloudSave(){
     const tasksLite=tasks.map(t=>{ const c=Object.assign({},t); delete c.images; c._imgN=(t.images||[]).length; return c; });
     CLOUD.db.collection('workspace').doc('main').set({
       members, groups:memberGroups, activeGroup, tasks:tasksLite, batches,
-      projAliases, projMeta, projMerge, projCats, idCodeMap, deletedNames, _ts:Date.now()
+      projAliases, projMeta:projMetaNoImg(), projMerge, projCats, idCodeMap, deletedNames, _ts:Date.now()
     }).catch(e=>console.warn('cloud save failed', e));
     cloudSaveImages();                                  // upload any new images to the images collection
   }, 700);
@@ -2545,6 +2587,14 @@ function cloudSaveImages(){
       CLOUD.db.collection('images').doc(im.id)
         .set({id:im.id, taskId:t.id, data:im.data, w:im.w||0, h:im.h||0, _ts:Date.now()})
         .catch(e=>{ CLOUD.upImgs.delete(im.id); console.warn('image upload failed', e); });
+    }
+  }));
+  Object.keys(projMeta).forEach(pk=>((projMeta[pk]&&projMeta[pk].images)||[]).forEach(im=>{   // project images (block diagrams / schedules)
+    if(im && im.id && im.data && !CLOUD.upImgs.has(im.id)){
+      CLOUD.upImgs.add(im.id);
+      CLOUD.db.collection('images').doc(im.id)
+        .set({id:im.id, projk:pk, data:im.data, w:im.w||0, h:im.h||0, _ts:Date.now()})
+        .catch(e=>{ CLOUD.upImgs.delete(im.id); console.warn('proj image upload failed', e); });
     }
   }));
 }
@@ -2564,17 +2614,27 @@ function cloudApplyDoc(d){
     });
   }
   if(Array.isArray(d.projAliases)) projAliases=d.projAliases;
-  if(d.projMeta) projMeta=d.projMeta;
+  if(d.projMeta){                                             // merge local + cloud project images back in (doc carries none)
+    const localImg={}; Object.keys(projMeta).forEach(k=>{ if(((projMeta[k]||{}).images||[]).length) localImg[k]=projMeta[k].images; });
+    const inc=d.projMeta;
+    Object.keys(inc).forEach(k=>{ const m={};
+      (localImg[k]||[]).forEach(im=>{ if(im&&im.id) m[im.id]=im; });
+      (((CLOUD.imgsByProj||{})[k])||[]).forEach(im=>{ if(im&&im.id) m[im.id]=im; });
+      if(Object.keys(m).length) inc[k]=Object.assign({}, inc[k], {images:Object.values(m)});
+    });
+    projMeta=inc;
+  }
   if(d.projMerge) projMerge=d.projMerge;
   if(Array.isArray(d.projCats)) projCats=d.projCats;
   if(d.idCodeMap) idCodeMap=d.idCodeMap;
   if(Array.isArray(d.deletedNames)) deletedNames=d.deletedNames;
 }
 function cloudLoadImagesInto(snap){
-  CLOUD.imgsByTask={};
+  CLOUD.imgsByTask={}; CLOUD.imgsByProj={};
   snap.forEach(dd=>{ const im=dd.data(); if(!im||!im.id) return;
     CLOUD.upImgs.add(im.id);
-    (CLOUD.imgsByTask[im.taskId]=CLOUD.imgsByTask[im.taskId]||[]).push({id:im.id,data:im.data,w:im.w,h:im.h}); });
+    if(im.projk) (CLOUD.imgsByProj[im.projk]=CLOUD.imgsByProj[im.projk]||[]).push({id:im.id,data:im.data,w:im.w,h:im.h});
+    else (CLOUD.imgsByTask[im.taskId]=CLOUD.imgsByTask[im.taskId]||[]).push({id:im.id,data:im.data,w:im.w,h:im.h}); });
 }
 async function cloudEnter(){                         // load once + subscribe to live updates
   const ref=CLOUD.db.collection('workspace').doc('main');
@@ -2593,6 +2653,17 @@ async function cloudEnter(){                         // load once + subscribe to
     CLOUD.applying=true;
     snap.docChanges().forEach(ch=>{
       const im=ch.doc.data(); if(!im||!im.id) return;
+      if(im.projk){                                      // PROJECT image (block diagram / schedule)
+        CLOUD.imgsByProj=CLOUD.imgsByProj||{}; const m=projMeta[im.projk];
+        if(ch.type==='removed'){ CLOUD.upImgs.delete(im.id);
+          if(CLOUD.imgsByProj[im.projk]) CLOUD.imgsByProj[im.projk]=CLOUD.imgsByProj[im.projk].filter(x=>x.id!==im.id);
+          if(m&&m.images) m.images=m.images.filter(x=>x.id!==im.id);
+        } else { CLOUD.upImgs.add(im.id); const obj={id:im.id,data:im.data,w:im.w,h:im.h};
+          const arr=(CLOUD.imgsByProj[im.projk]=CLOUD.imgsByProj[im.projk]||[]); const ai=arr.findIndex(x=>x.id===im.id); if(ai>=0)arr[ai]=obj; else arr.push(obj);
+          if(m){ m.images=m.images||[]; const pi=m.images.findIndex(x=>x.id===im.id); if(pi>=0)m.images[pi]=obj; else m.images.push(obj); }
+        }
+        return;
+      }
       const t=tasks.find(x=>x.id===im.taskId);
       if(ch.type==='removed'){
         CLOUD.upImgs.delete(im.id);
