@@ -628,7 +628,8 @@ function overlayTasks(parsed, sourceName){
       project:p.project, reporter:p.reporter, rawOwner:p.rawOwner,
       ownerIds:res.ids, unmatched:res.unmatched, shared:res.ids.length>1,
       current:p.current, next:p.next, risk:p.risk||'Medium', due:p.due,
-      complexity:p.complexity, progress:p.progress, images:p._images||p.images||[],
+      complexity:p.complexity, progress:p.progress, nextProgress:(p.nextProgress!=null?p.nextProgress:null),
+      images:p._images||p.images||[],
       analysis:generateAnalysis(p), source:sourceName, imageReport:p._imageReport||false,
     };
     const ex=tasks.find(t=>t.key===key);
@@ -643,7 +644,8 @@ function overlayTasks(parsed, sourceName){
       inc.id=ex.id; inc.status='Updated'; inc.history=ex.history;
       inc.images=(inc.images.length?inc.images:ex.images);
       if(ex.manualOwners){ inc.ownerIds=ex.ownerIds; inc.unmatched=ex.unmatched; inc.shared=ex.shared; inc.manualOwners=true; } // keep manual owners
-      if(ex.manualEdit){ inc.risk=ex.risk; inc.complexity=ex.complexity; inc.progress=ex.progress; inc.manualEdit=true; }       // keep manual risk/cx/%
+      if(ex.manualEdit){ inc.risk=ex.risk; inc.complexity=ex.complexity; inc.progress=ex.progress; inc.nextProgress=ex.nextProgress; inc.manualEdit=true; } // keep manual risk/cx/%
+      if(ex.manualText){ inc.current=ex.current; inc.next=ex.next; inc.analysis=ex.analysis; inc.manualText=true; }              // keep manual text edits
       Object.assign(ex, inc);
       nUpd++; touched.push(ex);
     } else {
@@ -1056,9 +1058,10 @@ function catalogTaskRow(t){
 function editTaskField(id, field, val){
   const t=tasks.find(x=>x.id===id); if(!t) return;
   if(field==='progress') t.progress=Math.max(0,Math.min(100,+val||0));
+  else if(field==='nextProgress') t.nextProgress=Math.max(0,Math.min(100,+val||0));
   else if(field==='project'){ t.project=val; t.projk=projKeyOf(val); t.projectLabel=projLabelOf(val); }
   else t[field]=val;
-  if(field==='progress'||field==='risk'||field==='complexity') t.manualEdit=true;  // survive re-import
+  if(field==='progress'||field==='risk'||field==='complexity'||field==='nextProgress') t.manualEdit=true;  // survive re-import
   if(field==='current'||field==='next'||field==='analysis') t.manualText=true;      // keep user edits
   persist(); renderStats(); renderCatalog(); renderMembersArea();
   // don't re-render the modal for free-text edits (would steal focus mid-typing)
@@ -1185,6 +1188,22 @@ function jumpToMember(mid){
   block.classList.remove('flash'); void block.offsetWidth; block.classList.add('flash');
   setTimeout(()=>{ const b=document.getElementById('mblock-'+mid); if(b) b.classList.remove('flash'); },1600);
 }
+function progBar(val, closed){
+  val=Math.max(0,Math.min(100,val||0));
+  return `<div class="prog"><span class="ptrack"><span class="pfill ${progClass(val)}" style="width:${val}%"></span></span><span class="pval ${closed?'done':''}">${val}%</span></div>`;
+}
+// This-week and Next-week shown as separate rows, each with its own progress bar
+function weekRows(t){
+  const closed=isClosed(t), hasCur=!!(t.current||'').trim(), hasNext=!!(t.next||'').trim();
+  let h='';
+  if(hasCur){ h+=`<div class="wk-row"><span class="wk-tag now">本週</span><span class="wk-desc">${esc(t.current)}</span></div>`+progBar(t.progress,closed); }
+  if(hasNext){
+    const np=(t.nextProgress!=null)?t.nextProgress:(hasCur?0:(t.progress||0));
+    h+=`<div class="wk-row"><span class="wk-tag nxt">下週</span><span class="wk-desc">${esc(t.next)}</span></div>`+progBar(np,false);
+  }
+  if(!hasCur && !hasNext){ h+=`<div class="wk-row"><span class="wk-desc">(無描述)</span></div>`+progBar(t.progress,closed); }
+  return h;
+}
 function taskCard(t){
   const sharedTag=t.shared?`<span class="tag shared">Shared owner</span>`:'';
   const thumbs=(t.images&&t.images.length)?`<div class="img-badge" title="${t.images.length} 張圖（見成員上方）">📎 ${t.images.length}</div>`:'';
@@ -1201,8 +1220,7 @@ function taskCard(t){
       ${sharedTag}
       <span class="tag st-${t.status}">${esc(t.status)}</span>
     </div>
-    <div class="desc">${esc(t.current || (t.next?('下週：'+t.next):'(無描述)'))}</div>
-    <div class="prog"><span class="ptrack"><span class="pfill ${progClass(t.progress)}" style="width:${t.progress}%"></span></span><span class="pval ${closed?'done':''}">${t.progress}%</span></div>
+    ${weekRows(t)}
     <div class="due">📅 ${esc(t.due||'—')} ${t.reporter?'· Reporter: '+esc(t.reporter):''}</div>
     ${delta}${thumbs}
   </div>`;
@@ -1226,7 +1244,8 @@ function openTask(id){
         <span class="tag st-${t.status}">${esc(t.status)}</span>
       </div>
       <div class="edit-row">
-        <label>進度 %<input type="number" min="0" max="100" value="${t.progress}" data-edit="progress" data-tid="${t.id}" class="prog-in"></label>
+        <label>本週進度 %<input type="number" min="0" max="100" value="${t.progress}" data-edit="progress" data-tid="${t.id}" class="prog-in"></label>
+        <label>下週進度 %<input type="number" min="0" max="100" value="${t.nextProgress!=null?t.nextProgress:''}" data-edit="nextProgress" data-tid="${t.id}" class="prog-in" placeholder="—"></label>
         <label>Risk<select data-edit="risk" data-tid="${t.id}">${optTags(['Low','Medium','High'],t.risk)}</select></label>
         <label>複雜度<select data-edit="complexity" data-tid="${t.id}">${optTags(['Low','Medium','High'],t.complexity)}</select></label>
       </div>
@@ -1321,7 +1340,7 @@ function openWorkbench(preMemberId){
   $('#phraseRow').innerHTML=Object.keys(PHRASES).map(k=>`<button data-phrase="${esc(k)}">${esc(k)}</button>`).join('');
   wbImages=[]; renderWbThumbs();
   ['#wbProject','#wbThisWeek','#wbIssue','#wbNext'].forEach(s=>$(s).value='');
-  $('#wbProgress').value=0;
+  $('#wbProgress').value=0; $('#wbNextProgress').value=0;
   $('#workbenchModal').hidden=false;
 }
 function renderWorkbenchSelect(){
@@ -1339,6 +1358,7 @@ function saveWorkbench(){
   const p={project, reporter:name, rawOwner:name, current,
     next:$('#wbNext').value.trim(), risk:$('#wbRisk').value, due:$('#wbDue').value,
     complexity:$('#wbComplexity').value, progress:+$('#wbProgress').value||0,
+    nextProgress:+$('#wbNextProgress').value||0,
     _images:wbImages.slice()};
   if($('#wbIssue').value.trim()) p.current += (p.current?' ':'')+'Issue/Note: '+$('#wbIssue').value.trim();
   overlayTasks([p], '工作台手動輸入');
@@ -1486,10 +1506,7 @@ function assemblePptx(memberIds){
     s.addShape(R,{x:0.7,y:0.34,w:0.14,h:0.14,fill:{color:PPT.cyan}});
     s.addText(`WEEKLY REPORT  ｜  ${date}`,
       {x:0.95,y:0.26,w:9,h:0.3,fontSize:11,bold:true,color:PPT.teal,fontFace:PPT.font,charSpacing:2});
-    s.addText([
-      {text:name,options:{bold:true,color:PPT.dark,fontFace:PPT.fontB}},
-      role?{text:'   '+role,options:{color:PPT.teal,fontSize:15,bold:true,fontFace:PPT.font}}:{text:''}
-    ],{x:0.7,y:0.6,w:10.6,h:0.64,fontSize:28,fontFace:PPT.fontB,valign:'middle'});
+    s.addText(name,{x:0.7,y:0.6,w:10.6,h:0.64,fontSize:28,bold:true,color:PPT.dark,fontFace:PPT.fontB,valign:'middle'});
     if(tag) s.addText(tag,{x:10.8,y:0.72,w:1.83,h:0.36,fontSize:12,bold:true,color:PPT.gray,fontFace:PPT.font,align:'right',valign:'middle'});
     s.addShape(R,{x:0.7,y:1.4,w:11.93,h:0.022,fill:{color:PPT.line}});
     s.addText('Weekly Report Hub · '+date,{x:0.7,y:7.06,w:11.93,h:0.3,fontSize:8,color:PPT.gray,fontFace:PPT.font,align:'right'});
