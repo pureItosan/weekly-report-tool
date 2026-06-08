@@ -161,6 +161,12 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--accent)}
 .cat-tab.active{background:var(--accent);color:#06243f;border-color:var(--accent)}
 .cat-tab .ct-n{font-size:11px;font-weight:600;opacity:.75;background:rgba(0,0,0,.18);border-radius:10px;padding:0 6px}
 .cat-tab.active .ct-n{background:rgba(255,255,255,.35)}
+.cat-tab .cc-x{margin-left:2px;opacity:.55;cursor:pointer;font-size:11px;padding:0 2px}
+.cat-tab .cc-x:hover{opacity:1}
+.cat-addtab{align-self:center}
+/* flat (non-collapsible) category sections */
+.cat-sec-head{display:flex;align-items:center;gap:10px;margin:16px 0 8px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.cat-sec{display:flex;flex-direction:column;gap:0}
 /* inline category dropdown on each project card */
 .pc-cat-sel{width:100%;border:none;background:transparent;color:var(--text);font-size:12px;font-weight:700;padding:6px 8px;cursor:pointer;border-radius:6px}
 .pc-cat-sel:hover{background:#1c2a40}
@@ -194,6 +200,22 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--accent)}
 .dd-upload input{flex:1 1 240px}
 .dd-group{margin-top:16px}
 .dd-group h3{font-size:14px;color:var(--accent);border-bottom:1px solid var(--line);padding-bottom:5px;margin-bottom:8px}
+/* design docs — level 1: project cards */
+.dd-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-top:12px}
+.dd-card{background:var(--panel2);border:1px solid var(--line);border-radius:12px;overflow:hidden;cursor:pointer;transition:border-color .15s,transform .1s}
+.dd-card:hover{border-color:var(--accent);transform:translateY(-2px)}
+.dd-thumb{height:120px;display:flex;align-items:center;justify-content:center;background:#0e1722;overflow:hidden}
+.dd-thumb img{width:100%;height:100%;object-fit:cover}
+.dd-noimg{font-size:40px;opacity:.4}
+.dd-cardbody{padding:10px 12px}
+.dd-cardtitle{font-weight:700;font-size:14px;margin-bottom:5px}
+.dd-cardsub{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+/* design docs — level 2: a project's documents */
+.dd-docs{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;margin-top:14px}
+.dd-doc{margin:0;background:var(--panel2);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.dd-doc img{width:100%;max-height:220px;object-fit:contain;background:#fff;cursor:zoom-in;display:block}
+.dd-doc figcaption{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:8px 10px;font-size:12.5px}
+.dd-doctitle{font-weight:600;color:#cdd8e8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* schedule attach row */
 .sched-attach{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
 .sched-refs{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px}

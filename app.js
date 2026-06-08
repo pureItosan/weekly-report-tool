@@ -1320,50 +1320,68 @@ function exportSchedulePPT(){
   };
   img.onerror=()=>{ URL.revokeObjectURL(url); toast('PPT 匯出失敗'); }; img.src=url;
 }
+// Excel with the full-colour schedule image embedded. The free SheetJS can't embed images,
+// so we build the .xlsx (OOXML zip) by hand with JSZip and float the PNG over the sheet.
 function exportScheduleExcel(){
-  const sched=_schedEdit.sched, lanes=(sched.lanes&&sched.lanes.length)?sched.lanes:SCHED_LANES_DEFAULT;
-  const items=(sched.items||[]).map(it=>Object.assign({},it,{_d:_sd(it.date)})).filter(it=>it._d);
-  if(!items.length){ toast('沒有里程碑可匯出'); return; }
-  const today=new Date(); today.setHours(0,0,0,0);
-  const ds=[today,...items.map(i=>i._d)]; items.forEach(i=>{ const e=_sd(i.end); if(e) ds.push(e); });
-  const start=_mon(new Date(Math.min(...ds.map(d=>+d)))), end=_mon(new Date(Math.max(...ds.map(d=>+d))+7*864e5));
-  const weeks=Math.max(4,Math.round((end-start)/(7*864e5)));
-  const wk=k=>new Date(+start+k*7*864e5), colOf=d=>Math.round((+_mon(d)-+start)/(7*864e5));
-  const qRow=['']; for(let k=0;k<weeks;k++){ const w=wk(k); qRow.push(w.getFullYear()+' Q'+(Math.floor(w.getMonth()/3)+1)); }
-  const dRow=['週']; for(let k=0;k<weeks;k++) dRow.push((wk(k).getMonth()+1)+'/'+wk(k).getDate());
-  const aoa=[qRow,dRow];
-  lanes.forEach(ln=>{ const row=[ln]; for(let k=0;k<weeks;k++) row.push('');
-    items.filter(it=>(it.lane||lanes[0])===ln).forEach(it=>{ const c=colOf(it._d)+1; if(c<1||c>weeks) return;
-      const mk=it.type==='star'?'★':it.type==='bar'?'▭':'●';
-      row[c]=(row[c]?row[c]+' / ':'')+mk+' '+(it.label||'')+' ('+it.date+(it.end?('→'+it.end):'')+')'; });
-    aoa.push(row); });
-  const nowRow=['Now']; for(let k=0;k<weeks;k++){ const w=wk(k),w2=new Date(+w+7*864e5); nowRow.push((today>=w&&today<w2)?'◀ Now':''); }
-  aoa.push(nowRow);
-  const ws=XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols']=[{wch:20}]; for(let k=0;k<weeks;k++) ws['!cols'].push({wch:16});
-  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Schedule');
-  XLSX.writeFile(wb, ((_schedEdit.title||'project')+'_schedule.xlsx').replace(/[\\/:*?"<>|]/g,'_')); toast('Excel 已下載');
+  const svg=scheduleSVG(_schedEdit.sched), b=new Blob([svg],{type:'image/svg+xml;charset=utf-8'}), url=URL.createObjectURL(b);
+  const img=new Image();
+  img.onload=()=>{ const sc=2, c=document.createElement('canvas'); c.width=img.naturalWidth*sc; c.height=img.naturalHeight*sc;
+    const ctx=c.getContext('2d'); ctx.scale(sc,sc); ctx.fillStyle='#fff'; ctx.fillRect(0,0,img.naturalWidth,img.naturalHeight); ctx.drawImage(img,0,0); URL.revokeObjectURL(url);
+    const b64=c.toDataURL('image/png').split(',')[1]; const cx=Math.round(img.naturalWidth*9525), cy=Math.round(img.naturalHeight*9525);
+    try{
+      const NS='xmlns="http://schemas.openxmlformats.org/package/2006/relationships"';
+      const zip=new JSZip();
+      zip.file('[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>');
+      zip.file('_rels/.rels',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships ${NS}><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`);
+      zip.file('xl/workbook.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Schedule" sheetId="1" r:id="rId1"/></sheets></workbook>');
+      zip.file('xl/_rels/workbook.xml.rels',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships ${NS}><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`);
+      zip.file('xl/worksheets/sheet1.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetData/><drawing r:id="rId1"/></worksheet>');
+      zip.file('xl/worksheets/_rels/sheet1.xml.rels',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships ${NS}><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>`);
+      zip.file('xl/drawings/drawing1.xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><xdr:oneCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:ext cx="${cx}" cy="${cy}"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="1" name="Schedule"/><xdr:cNvPicPr/></xdr:nvPicPr><xdr:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor></xdr:wsDr>`);
+      zip.file('xl/drawings/_rels/drawing1.xml.rels',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships ${NS}><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/></Relationships>`);
+      zip.file('xl/media/image1.png', b64, {base64:true});
+      zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}).then(out=>{
+        downloadBlob(out, ((_schedEdit.title||'project')+'_schedule.xlsx').replace(/[\\/:*?"<>|]/g,'_')); toast('Excel（含彩色時間軸）已下載');
+      }).catch(e=>{ console.warn(e); toast('Excel 匯出失敗'); });
+    }catch(e){ console.warn(e); toast('Excel 匯出失敗'); }
+  };
+  img.onerror=()=>{ URL.revokeObjectURL(url); toast('Excel 匯出失敗'); }; img.src=url;
 }
-/* ---------- DESIGN DOCUMENTS (block diagram / GPIO table / architecture …), global, cloud-synced ---------- */
-// stored per project in projMeta[projk].images (image objects may carry a `title`); shown in one global library.
-function openDesignDocs(){ renderDesignDocs(); $('#projImgModal').hidden=false; }
+/* ---------- DESIGN DOCUMENTS (block diagram / GPIO table / architecture …), per project, cloud-synced ---------- */
+// stored per project in projMeta[projk].images (each image may carry a `title`). Two-level browser: pick a project -> its docs.
+let _ddProjk=null;
+function openDesignDocs(){ _ddProjk=null; renderDesignDocs(); $('#projImgModal').hidden=false; }
 function renderDesignDocs(){
+  if(_ddProjk){ renderDesignDocsProject(); return; }
+  // LEVEL 1 — a card per project; click to open that project's design documents
   const groups=projectGroups();
-  const projOpts=groups.map(g=>{ const m=projMeta[g.projk]||{}; return `<option value="${esc(g.projk)}">${esc(m.code||g.label)}</option>`; }).join('');
-  const withImgs=groups.filter(g=>((projMeta[g.projk]||{}).images||[]).length);
-  const gallery= withImgs.length ? withImgs.map(g=>{ const m=projMeta[g.projk]||{};
-    return `<div class="dd-group"><h3>${esc(m.code||g.label)}</h3><div class="pimg-grid">${(m.images||[]).map(im=>`<span class="pimg-item"><img src="${im.data}" data-light="${im.id}">${im.title?`<div class="pimg-cap">${esc(im.title)}</div>`:''}<button class="img-del" data-pdelimg="${esc(g.projk)}|${im.id}" title="刪除">✕</button></span>`).join('')}</div></div>`;
-  }).join('') : '<p class="hint">尚未有設計文件。用上方表單選專案、填標題、上傳方塊圖／GPIO Table／架構圖等。</p>';
+  const cards=groups.map(g=>{ const m=projMeta[g.projk]||{}, imgs=m.images||[], thumb=imgs[0];
+    return `<div class="dd-card" data-ddopen="${esc(g.projk)}">
+      <div class="dd-thumb">${thumb?`<img src="${thumb.data}">`:'<span class="dd-noimg">📐</span>'}</div>
+      <div class="dd-cardbody"><div class="dd-cardtitle">${esc(m.code||g.label)}</div>
+        <div class="dd-cardsub"><span class="cat-name cat-${esc(projCategory(g))}">${esc(projCategory(g))}</span> · ${imgs.length} 份文件</div></div></div>`;
+  }).join('');
   $('#projImgInner').innerHTML=`
     <div class="modal-head"><h2>📐 Design Documents</h2><button class="icon-btn" data-close>✕</button></div>
     <div class="modal-body">
+      <p class="hint">點任一專案，進去上傳／檢視它的設計文件（方塊圖、GPIO Table、架構圖、Schematic…）。</p>
+      <div class="dd-cards">${cards||'<p class="hint">尚無專案，請先到專案總覽建立。</p>'}</div>
+    </div>
+    <div class="modal-foot"><button class="btn" data-close>關閉</button></div>`;
+}
+function renderDesignDocsProject(){
+  const projk=_ddProjk, m=projMeta[projk]||{}, imgs=m.images||[];
+  const g=projectGroups().find(x=>x.projk===resolveProjk(projk));
+  const docs= imgs.length ? imgs.map(im=>`<figure class="dd-doc"><img src="${im.data}" data-light="${im.id}"><figcaption><span class="dd-doctitle">${esc(im.title||'未命名文件')}</span><button class="img-del" data-pdelimg="${esc(projk)}|${im.id}" title="刪除">✕</button></figcaption></figure>`).join('') : '<p class="hint">這個專案還沒有設計文件，從上方上傳第一份。</p>';
+  $('#projImgInner').innerHTML=`
+    <div class="modal-head"><h2><button class="btn xs" data-ddback="1">← 返回</button> &nbsp;📐 ${esc(m.code||(g&&g.label)||projk)} · 設計文件</h2><button class="icon-btn" data-close>✕</button></div>
+    <div class="modal-body">
       <div class="dd-upload">
-        <select id="ddProj" title="屬於哪個專案">${projOpts}</select>
-        <input id="ddTitle" placeholder="文件標題（例：Block Diagram、GPIO Table）">
-        <label class="btn sm primary">＋ 上傳檔案<input type="file" accept="image/*" multiple hidden data-ddaddimg="1"></label>
+        <input id="ddTitle" placeholder="文件標題（例：Block Diagram、GPIO Table、Schematic）">
+        <label class="btn sm primary">＋ 上傳設計文件<input type="file" accept="image/*" multiple hidden data-ddaddimg="1"></label>
       </div>
-      <p class="hint">選專案 → 填標題 → 上傳。點圖放大、可刪除，雲端自動同步。</p>
-      ${gallery}
+      <p class="hint">填標題 → 上傳。可放系統方塊圖、GPIO Table、架構圖等；點圖放大、可刪除，雲端自動同步。</p>
+      <div class="dd-docs">${docs}</div>
     </div>
     <div class="modal-foot"><button class="btn" data-close>關閉</button></div>`;
 }
@@ -1405,40 +1423,26 @@ function renderCatalog(){
   if(catalogMember) groups=groups.map(g=>({...g, tasks:g.tasks.filter(t=>(t.ownerIds||[]).includes(catalogMember))}))
                                   .filter(g=>g.tasks.length);
   const cont=$('#projectCatalog'); if(!cont) return;
-  // category-management bar (add / rename / delete custom categories) — always shown
-  const custom=allCats().filter(c=>!BASE_CATS.includes(c) && c!=='General');
-  const mgrBar=`<div class="cat-mgr">
-      <span class="cat-mgr-label">分類管理</span>
-      ${allCats().map(c=>`<span class="cat-chip cat-${esc(c)}">${esc(c)}${(!BASE_CATS.includes(c)&&c!=='General')?` <button class="cc-x" data-renamecat="${esc(c)}" title="改名">✎</button><button class="cc-x" data-delcat="${esc(c)}" title="刪除分類">✕</button>`:''}</span>`).join('')}
-      <button class="btn xs primary" data-addcat="1" title="新增自訂分類">＋ 新增分類</button>
-    </div>`;
-  if(!groups.length){ cont.innerHTML=mgrBar+'<p class="hint">尚無專案，請先匯入週報。</p>'; return; }
-  // group by Product Category; remember each group's expand/collapse so editing never makes the view jump
+  if(!groups.length){
+    cont.innerHTML=`<div class="cat-tabs"><button class="btn xs primary cat-addtab" data-addcat="1">＋ 新增分類</button></div><p class="hint">尚無專案，請先匯入週報或在上方「＋ 新增專案 / 貼上清單」建立。</p>`; return; }
   const byCat={}; groups.forEach(g=>{ const c=projCategory(g); (byCat[c]=byCat[c]||[]).push(g); });
   const order=[...allCats(), ...Object.keys(byCat).filter(c=>!allCats().includes(c))];
+  const present=order.filter(c=>byCat[c]);
   if(catFilter && !byCat[catFilter]) catFilter='';            // selected tab emptied -> back to all
-  // tab bar: click a type to view only that category's projects
-  const tabCats=['', ...order.filter(c=>byCat[c])];
-  const tabBar=`<div class="cat-tabs">${tabCats.map(c=>{
-    const n=(c==='')?groups.length:byCat[c].length; const lbl=(c==='')?'全部':c;
-    return `<button class="cat-tab cat-${esc(c)} ${catFilter===c?'active':''}" data-catfilter="${esc(c)}">${esc(lbl)} <span class="ct-n">${n}</span></button>`;
-  }).join('')}</div>`;
-  if(!catOpen){ catOpen={}; }                                  // first run: default open all except General/其他
-  const editCat = editingProj ? projCategory(projectGroups().find(g=>g.projk===editingProj)||{}) : null;
-  let showCats=order.filter(c=>byCat[c]);
-  if(catFilter) showCats=[catFilter];                          // tab selected -> only that category
-  cont.innerHTML = mgrBar + tabBar + showCats.map(c=>{
+  // ONE tab bar = filter + manage. Click a tab -> show only that category's projects (flat, no extra collapse).
+  const tab=(c,lbl,n,manage)=>`<button class="cat-tab cat-${esc(c)} ${catFilter===c?'active':''}" data-catfilter="${esc(c)}">${esc(lbl)} <span class="ct-n">${n}</span>${manage?`<span class="cc-x" data-renamecat="${esc(c)}" title="改名">✎</span><span class="cc-x" data-delcat="${esc(c)}" title="刪除分類">✕</span>`:''}</button>`;
+  const tabBar=`<div class="cat-tabs">
+      ${tab('','全部',groups.length,false)}
+      ${present.map(c=>tab(c,c,byCat[c].length,(!BASE_CATS.includes(c)&&c!=='General'))).join('')}
+      <button class="btn xs primary cat-addtab" data-addcat="1" title="新增自訂分類">＋ 新增分類</button>
+    </div>`;
+  const showCats = catFilter ? [catFilter] : present;
+  const sections = showCats.map(c=>{
     const list=byCat[c]; const nTasks=list.reduce((s,g)=>s+g.tasks.length,0);
-    const remembered = (c in catOpen) ? catOpen[c] : !(c==='General'||c==='其他');   // default state
-    const open = remembered || c===editCat || c===catFilter;  // keep the editing / filtered group open
-    return `<details class="cat-group" data-cat="${esc(c)}" ${open?'open':''}>
-      <summary class="cat-head"><span class="cat-name cat-${esc(c)}">${esc(c)}</span>
-        <span class="cat-meta">${list.length} 專案 · ${nTasks} 任務</span></summary>
-      ${list.map(catalogCard).join('')}</details>`;
+    const head = catFilter ? '' : `<div class="cat-sec-head"><span class="cat-name cat-${esc(c)}">${esc(c)}</span><span class="cat-meta">${list.length} 專案 · ${nTasks} 任務</span></div>`;
+    return head + `<div class="cat-sec">${list.map(catalogCard).join('')}</div>`;
   }).join('');
-  cont.querySelectorAll('details.cat-group').forEach(d=>d.addEventListener('toggle',()=>{
-    catOpen[d.dataset.cat]=d.open; store.save('wrt_catopen',catOpen);
-  }));
+  cont.innerHTML = tabBar + sections;
   wireProjectDrag();
 }
 function optTags(arr,val){ return arr.map(x=>`<option ${x===val?'selected':''}>${x}</option>`).join(''); }
@@ -2542,6 +2546,8 @@ function wireEvents(){
     if(t.dataset.delproj!==undefined){ deleteProjectGroup(t.dataset.delproj); return; }
     if(t.dataset.sched!==undefined){ openSchedule(t.dataset.sched); return; }
     if(t.dataset.pdelimg!==undefined){ const [pk,id]=t.dataset.pdelimg.split('|'); removeProjectImage(pk,id); return; }
+    { const dc=t.closest('[data-ddopen]'); if(dc){ _ddProjk=dc.dataset.ddopen; renderDesignDocs(); return; } }
+    if(t.dataset.ddback!==undefined){ _ddProjk=null; renderDesignDocs(); return; }
     if(t.dataset.sadd!==undefined){ addSchedItem(); return; }
     if(t.dataset.sdel!==undefined){ delSchedItem(t.dataset.sdel); return; }
     if(t.dataset.ssave!==undefined){ saveScheduleEdit(); return; }
@@ -2552,7 +2558,7 @@ function wireEvents(){
     if(t.dataset.addcat!==undefined){ const n=prompt('新增專案分類名稱：'); if(n) addCategory(n); return; }
     if(t.dataset.renamecat!==undefined){ const n=prompt('將分類「'+t.dataset.renamecat+'」改名為：', t.dataset.renamecat); if(n) renameCategory(t.dataset.renamecat, n); return; }
     if(t.dataset.delcat!==undefined){ deleteCategory(t.dataset.delcat); return; }
-    if(t.dataset.catfilter!==undefined){ catFilter=t.dataset.catfilter; renderCatalog(); return; }
+    { const cf=t.closest('[data-catfilter]'); if(cf){ catFilter=cf.dataset.catfilter; renderCatalog(); return; } }
     if(t.dataset.rmowner!==undefined){ const [tid,mid]=t.dataset.rmowner.split('|'); removeTaskOwner(tid,mid); return; }
     if(t.dataset.ocr!==undefined){ ocrTask(t.dataset.ocr); return; }
     if(t.dataset.opentask!==undefined){ openTask(t.dataset.opentask); return; }
@@ -2577,7 +2583,7 @@ function wireEvents(){
     if(el.dataset.setphase!==undefined){ setProjPhase(el.dataset.setphase, el.value); return; }
     if(el.dataset.si!==undefined && el.dataset.sf){ updSchedItem(el.dataset.si, el.dataset.sf, el.value); return; }
     if(el.dataset.smeta!==undefined){ updSchedMeta(el.dataset.smeta, el.value); return; }
-    if(el.dataset.ddaddimg!==undefined){ const pk=($('#ddProj')||{}).value, title=(($('#ddTitle')||{}).value||'').trim(); if(pk) addProjectImages(pk, el.files, title); el.value=''; return; }
+    if(el.dataset.ddaddimg!==undefined){ const title=(($('#ddTitle')||{}).value||'').trim(); if(_ddProjk) addProjectImages(_ddProjk, el.files, title); el.value=''; return; }
     if(el.dataset.saddimg!==undefined){ uploadScheduleAttach(el.files); el.value=''; return; }
     if(el.dataset.edit && el.dataset.tid){ editTaskField(el.dataset.tid, el.dataset.edit, el.value); return; }
     if(el.dataset.addowner){ addTaskOwner(el.dataset.addowner, el.value); el.value=''; return; }
