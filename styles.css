@@ -56,6 +56,11 @@ code{background:#0c1118;padding:1px 5px;border-radius:5px;color:var(--accent2);f
 .group-bar select{flex:1;min-width:0;background:var(--panel2);color:var(--text);
   border:1px solid var(--line);border-radius:8px;padding:5px 7px;font-size:12px}
 .btn.xs{padding:4px 8px;font-size:12px;line-height:1.1;flex:none}
+.member-chips .cname{color:var(--accent2);font-size:12px;font-weight:600}
+.member-head .name .cname,.member-head .cname{color:var(--accent2);font-weight:600;margin-left:6px}
+.cname-mini{flex:1.1;min-width:0;background:var(--panel);color:var(--text);
+  border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:11px}
+.cname-mini::placeholder{color:var(--muted)}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
   padding:14px;box-shadow:var(--shadow)}
 .panel h2{font-size:15px;display:flex;align-items:center;gap:8px;margin-bottom:8px}

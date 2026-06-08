@@ -63,6 +63,11 @@ code{background:#0c1118;padding:1px 5px;border-radius:5px;color:var(--accent2);f
 .group-bar select{flex:1;min-width:0;background:var(--panel2);color:var(--text);
   border:1px solid var(--line);border-radius:8px;padding:5px 7px;font-size:12px}
 .btn.xs{padding:4px 8px;font-size:12px;line-height:1.1;flex:none}
+.member-chips .cname{color:var(--accent2);font-size:12px;font-weight:600}
+.member-head .name .cname,.member-head .cname{color:var(--accent2);font-weight:600;margin-left:6px}
+.cname-mini{flex:1.1;min-width:0;background:var(--panel);color:var(--text);
+  border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:11px}
+.cname-mini::placeholder{color:var(--muted)}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
   padding:14px;box-shadow:var(--shadow)}
 .panel h2{font-size:15px;display:flex;align-items:center;gap:8px;margin-bottom:8px}
@@ -391,6 +396,7 @@ label.check input{width:auto}
       <div class="group-bar">
         <span class="gb-label">群組</span>
         <select id="groupSelect" title="切換群組（各自記住成員順序與專業）"></select>
+        <button class="btn xs" id="saveGroupBtn" title="儲存目前排列到此群組">💾</button>
         <button class="btn xs" id="newGroupBtn" title="新增群組">＋</button>
         <button class="btn xs" id="renameGroupBtn" title="群組改名">✎</button>
         <button class="btn xs danger" id="delGroupBtn" title="刪除群組">🗑</button>
@@ -708,14 +714,18 @@ function parseMemberText(text){
     // optional trailing role tag:  "David [RF]"  or  "David #RF"
     let role=''; const rt=line.match(/[\[#]\s*([A-Za-z]{1,8})\s*\]?\s*$/);
     if(rt && normRole(rt[1])){ role=normRole(rt[1]); line=line.replace(/[\[#]\s*[A-Za-z]{1,8}\s*\]?\s*$/,'').trim(); }
+    // Chinese name: a CJK run anywhere on the line  ("Aaron 王小明" / "Aaron 王小明 [EE]")
+    let cname=''; const cm=line.match(/[㐀-鿿]{1,12}/);
+    if(cm){ cname=cm[0].trim(); line=line.replace(cm[0],' ').replace(/\s+/g,' ').trim(); }
     // CSV style "name,alias,alias" OR "name: alias, alias"
     let name, aliasStr='';
     if(/[:：]/.test(line)){ const p=line.split(/[:：]/); name=p[0].trim(); aliasStr=p.slice(1).join(':'); }
     else if(line.includes(',')){ const p=line.split(','); name=p[0].trim(); aliasStr=p.slice(1).join(','); }
     else name=line;
+    if(!name && cname){ name=cname; cname=''; }   // a Chinese-only line -> that IS the name
     if(!name) return;
     const aliases=aliasStr.split(/[,，、/]/).map(s=>s.trim()).filter(Boolean);
-    out.push({name, aliases, role});
+    out.push({name, aliases, role, cname});
   });
   return out;
 }
@@ -727,8 +737,9 @@ function addMembers(list, opts){
     if(ex){ // merge aliases, do not duplicate
       m.aliases.forEach(a=>{ if(!ex.aliases.some(b=>norm(b)===norm(a))) ex.aliases.push(a); });
       if(m.role && !ex.role) ex.role=m.role;
+      if(m.cname && !ex.cname) ex.cname=m.cname;
     } else {
-      members.push({id:uid(), name:m.name, aliases:m.aliases||[], role:m.role||'', role2:m.role2||''});
+      members.push({id:uid(), name:m.name, aliases:m.aliases||[], role:m.role||'', role2:m.role2||'', cname:m.cname||''});
     }
   });
   reresolveAllTasks();   // membership changed -> re-assign owners on existing tasks
@@ -740,6 +751,8 @@ function deleteMember(id){
 }
 function setMemberRole(id, role){ const m=members.find(x=>x.id===id); if(m){ m.role=normRole(role); persist(); renderAll(); } }
 function setMemberRole2(id, role){ const m=members.find(x=>x.id===id); if(m){ m.role2=normRole(role); persist(); renderAll(); } }
+function setMemberCname(id, val){ const m=members.find(x=>x.id===id); if(m){ m.cname=String(val||'').trim(); persist(); renderAll(); } }
+function memberDisplay(m){ return m ? (m.cname? m.name+' · '+m.cname : m.name) : ''; }   // "Aaron · 王小明"
 function memberRole(id){ const m=members.find(x=>x.id===id); return m?(m.role||''):''; }
 function memberRoles(id){ const m=members.find(x=>x.id===id); return m?[m.role,m.role2].filter(Boolean):[]; }
 
@@ -1450,6 +1463,7 @@ function renderMembers(){
       <div class="mchip-top">
         <span class="drag-handle" title="拖曳調整順序">⠿</span>
         <span class="mname">${esc(m.name)}</span>
+        ${m.cname?`<span class="cname" title="中文名">${esc(m.cname)}</span>`:''}
         ${roleBadge(m.role)}${roleBadge(m.role2,true)}
         ${m.aliases.length?`<span class="alias">${esc(m.aliases.join(', '))}</span>`:''}
         <button class="mdel" title="刪除" data-del-member="${m.id}">✕</button>
@@ -1457,6 +1471,7 @@ function renderMembers(){
       <div class="mchip-roles">
         <label>主<select class="role-mini" data-setrole="${m.id}">${roleOptions(m.role)}</select></label>
         <label>副<select class="role-mini sub" data-setrole2="${m.id}">${roleOptions(m.role2)}</select></label>
+        <input class="cname-mini" data-setcname="${m.id}" value="${esc(m.cname||'')}" placeholder="中文名" maxlength="12" title="中文姓名">
       </div>
     </li>`).join('');
   wireMemberDrag();
@@ -1468,6 +1483,7 @@ function renderGroups(){
   const sel=$('#groupSelect'); if(!sel) return;
   sel.innerHTML=memberGroups.map(g=>`<option value="${esc(g.name)}"${g.name===activeGroup?' selected':''}>${esc(g.name)} · ${(g.members||[]).length}人</option>`).join('');
 }
+function saveGroup(){ syncActiveGroup(); persist(); renderGroups(); toast('已儲存分組：'+activeGroup+'（'+members.length+' 人）'); }
 function switchGroup(name){
   if(name===activeGroup || !memberGroups.some(g=>g.name===name)) return;
   syncActiveGroup();                                   // save current roster into its group
@@ -1711,7 +1727,7 @@ function renderMembersArea(){
     if(filters.role && m.role!==filters.role && m.role2!==filters.role) return;  // primary OR secondary discipline
     const list=map.get(m.id).filter(matchTask); list.forEach(t=>shown.add(t.id));
     if((filters.hideEmpty || filtering) && !list.length) return;
-    html+=memberBlock(m.name, list, false, m.id);
+    html+=memberBlock(memberDisplay(m), list, false, m.id);
   });
   if((!filters.member || filters.member==='__un__') && !filters.role){
     const ul=unassigned.filter(matchTask); ul.forEach(t=>shown.add(t.id));
@@ -2186,7 +2202,7 @@ function assemblePptx(memberIds){
     attachPages(name,role,imgs);
   }
 
-  targets.forEach(m=>renderMember(m.name,[m.role,m.role2].filter(Boolean).join(' · '),map.get(m.id)||[]));
+  targets.forEach(m=>renderMember(memberDisplay(m),[m.role,m.role2].filter(Boolean).join(' · '),map.get(m.id)||[]));
   if((!memberIds||!memberIds.length) && unassigned.length)
     renderMember('Unassigned','',unassigned);
 
@@ -2221,7 +2237,7 @@ async function exportWord(memberIds){
   };
 
   let bodyXml='';
-  targets.forEach(m=>{ bodyXml+=memberReportXml(m.name, map.get(m.id), collect); });
+  targets.forEach(m=>{ bodyXml+=memberReportXml(memberDisplay(m), map.get(m.id), collect); });
   if((!memberIds||!memberIds.length) && unassigned.length)
     bodyXml+=memberReportXml('Unassigned', unassigned, collect);
 
@@ -2500,6 +2516,7 @@ function wireEvents(){
   $('#resetTasksBtn').addEventListener('click', resetTasks);
   $('#loadFromReportBtn').addEventListener('click', ()=>{ if(!tasks.length){ toast('請先匯入週報'); return; } const a=autoAddFromReport(); toast(a.length?('已補齊 '+a.length+' 位成員'):'報告中的負責人都已在名單'); });
   $('#groupSelect').addEventListener('change', e=>switchGroup(e.target.value));
+  $('#saveGroupBtn').addEventListener('click', saveGroup);
   $('#newGroupBtn').addEventListener('click', createGroup);
   $('#renameGroupBtn').addEventListener('click', renameGroup);
   $('#delGroupBtn').addEventListener('click', deleteGroup);
@@ -2560,6 +2577,7 @@ function wireEvents(){
     if(el.id==='filterRole'){ filters.role=el.value; renderMembersArea(); return; }
     if(el.dataset.setrole!==undefined){ setMemberRole(el.dataset.setrole, el.value); return; }
     if(el.dataset.setrole2!==undefined){ setMemberRole2(el.dataset.setrole2, el.value); return; }
+    if(el.dataset.setcname!==undefined){ setMemberCname(el.dataset.setcname, el.value); return; }
     if(el.dataset.edit && el.dataset.tid){ editTaskField(el.dataset.tid, el.dataset.edit, el.value); return; }
     if(el.dataset.addowner){ addTaskOwner(el.dataset.addowner, el.value); el.value=''; return; }
   });
