@@ -1617,7 +1617,7 @@ function assemblePptx(memberIds){
   function estRowH(lines){
     const c=(lines&&lines.length?lines:['—']).slice(0,10)
       .reduce((a,l)=>a+Math.max(1,Math.ceil(Math.min(l.length,200)/CPCELL)),0);
-    return c*0.21 + 0.16;
+    return c*0.19 + 0.12;   // calibrated to the tighter cell margins below
   }
   // one image card (white card, cyan top, contained image, caption)
   function imgCard(s,x,y,w,h,im,n){
@@ -1657,7 +1657,7 @@ function assemblePptx(memberIds){
       ]);
     });
     s.addTable(rows,{x:0.7,y:top,w:11.93,colW:COLW,border:{type:'solid',color:'D8E0EC',pt:0.5},
-      fontFace:PPT.font,fontSize:TFONT,valign:'top',autoPage:false,margin:[5,6,5,6]});
+      fontFace:PPT.font,fontSize:TFONT,valign:'top',autoPage:false,margin:[3,5,3,5]});
   }
 
   // ---- render one member: This-week table, then Next-week table BELOW it on the
@@ -1675,22 +1675,24 @@ function assemblePptx(memberIds){
       s.addText('本週尚未提供工作內容',{x:3.0,y:3.66,w:7.33,h:0.5,fontSize:13,color:PPT.gray,fontFace:PPT.font,align:'center'});
       return;
     }
-    const HEAD_H=0.34;
+    const HEAD_H=0.32, LBL=0.40, GAP=0.20;                  // compact spacing -> more fits per slide
     let s=null, y=0, started=false;
     const newSlide=()=>{ s=pptx.addSlide(); header(s,name,role, started?'(續) cont.':''); started=true; y=1.5; };
     function section(label, rowsG, key){
+      let recorded=false;
+      const rec=()=>{ if(!recorded){ recorded=true; if(window.__pgdbg) window.__pgdbg.push({name, sec:/THIS/.test(label)?'this':'next', slide:pptx.slides.length}); } };
       if(!rowsG.length){                                      // always show the section (empty = placeholder)
-        if(!s || y+0.46+HEAD_H+0.45 > MAXY) newSlide();
-        sectionLabel(s,label,y); y+=0.46;
+        if(!s || y+LBL+HEAD_H+0.42 > MAXY) newSlide();
+        sectionLabel(s,label,y); y+=LBL; rec();
         buildTable(s, y, key, []);
-        y += HEAD_H + 0.42 + 0.32;
+        y += HEAD_H + 0.40 + GAP;
         return;
       }
       let i=0;
       while(i<rowsG.length){
         const firstH=estRowH(rowsG[i][key]);
-        if(!s || y+0.46+HEAD_H+firstH > MAXY) newSlide();    // room for label + header + 1 row
-        sectionLabel(s,label,y); y+=0.46;
+        if(!s || y+LBL+HEAD_H+firstH > MAXY) newSlide();     // room for label + header + 1 row
+        sectionLabel(s,label,y); y+=LBL; rec();
         const top=y; let used=HEAD_H; const chunk=[];
         while(i<rowsG.length){
           const h=estRowH(rowsG[i][key]);
@@ -1698,7 +1700,7 @@ function assemblePptx(memberIds){
           chunk.push(rowsG[i]); used+=h; i++;
         }
         buildTable(s, top, key, chunk);
-        y = top + used + 0.32;                                // gap before next section
+        y = top + used + GAP;                                 // gap before next section
       }
     }
     newSlide();
