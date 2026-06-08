@@ -1136,8 +1136,13 @@ function parseProjectList(text){                        // one project per line:
 function importProjectList(text){
   const rows=parseProjectList(text);
   if(!rows.length){ toast('沒有解析到專案。格式：代號 | 客戶 | 類別 | Chipset | 說明'); return; }
+  // detect variants that share a base code (B01W025.00/.01/.02) so they become SEPARATE cards;
+  // a unique code keeps its base key so it still auto-links to the matching tasks.
+  const base={}, cnt={}; rows.forEach(r=>{ const b=projMasterKey(r.code); base[r.code]=b; cnt[b]=(cnt[b]||0)+1; });
+  const keys=new Set();
   rows.forEach(r=>{
-    const k=projMasterKey(r.code);
+    const k = cnt[base[r.code]]>1 ? ('c:'+norm(r.code)) : base[r.code];   // split variants by full code
+    keys.add(k);
     let cat=r.category||'';
     if(cat && cat!=='General' && !allCats().some(c=>c.toLowerCase()===cat.toLowerCase())){
       if(!projCats.includes(cat)) projCats.push(cat);          // auto-create unknown categories (e.g. LBR)
@@ -1147,10 +1152,12 @@ function importProjectList(text){
       code:mergeField(ex.code,r.code), customer:mergeField(ex.customer,r.customer),
       category:cat||ex.category||'', chipset:mergeField(ex.chipset,r.chipset), desc:mergeField(ex.desc,r.desc) });
   });
-  const uniq=new Set(rows.map(r=>projMasterKey(r.code))).size;
+  // when a base code is split into variants, drop any stale MERGED master left at the base key (unless real tasks use it)
+  Object.keys(cnt).forEach(b=>{ if(cnt[b]>1 && projMeta[b] && projMeta[b].master && !keys.has(b)
+      && !visibleTasks().some(t=>resolveProjk(t.projk||t.key)===b)) delete projMeta[b]; });
   persist(); renderCatalog(); renderStats();
   $('#projListModal').hidden=true;
-  toast('已匯入 '+rows.length+' 行，合併為 '+uniq+' 個專案');
+  toast('已匯入 '+rows.length+' 行，建立 '+keys.size+' 個專案');
 }
 function addBlankProject(){
   const code=prompt('新增專案代號（例：B01W050.00）：'); if(!code||!code.trim()) return;
