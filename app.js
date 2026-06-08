@@ -476,23 +476,28 @@ async function parsePPTX(file){
       tableSlides.push(slideNo);              // a new person's section starts here
     } else if(images.length){
       const big=images.some(im=>(im.w||0)>=360 && (im.h||0)>=150);
-      // (a) detail/analysis page right after a member's report -> attach to ONE of that member's tasks
-      //     (storage-light). Skipped for closing/divider slides so the deck's "Thank You" page
-      //     never lands inside the last member's section.
-      if(!isClosing){
+      // (a) SMALL detail images right after a member's report -> attach to that member.
+      //     Big images are NOT attached here: a big image may be SOMEONE ELSE's pasted report
+      //     (another person's report screenshot pasted after a member's table) or a "Thank You"
+      //     page — attaching it to the preceding member is wrong. Big images go to OCR (b),
+      //     which attributes them correctly.
+      if(!isClosing && !big){
         if(lastTaskSlide>=0 && (slideNo-lastTaskSlide)<=4 && out[lastSectionStart]){
           out[lastSectionStart]._images=(out[lastSectionStart]._images||[]).concat(images);
-        } else if(!big && lastTaskIdxBySlide>=0){
+        } else if(lastTaskIdxBySlide>=0){
           out[lastTaskIdxBySlide]._images=(out[lastTaskIdxBySlide]._images||[]).concat(images);
         }
       }
-      // (b) ANY big single image might be a PASTED REPORT -> keep a hi-res OCR placeholder; OCR decides
-      //     (if OCR finds "Reporter: X" -> creates X's tasks; otherwise placeholder is just dropped)
-      if(big){
+      // (b) big image -> hi-res OCR placeholder. OCR decides: "Reporter: X" -> X's own report;
+      //     no Reporter -> a detail image for the member it FOLLOWS (carried in _afterReporter).
+      //     Closing/divider ("Thank You") slides are skipped entirely.
+      if(big && !isClosing){
         const hi=[];
-        for(let k=0;k<images.length;k++){ const s=await shrinkImage(origs[k]||images[k].data, 1200, 0.82); hi.push({id:uid(), data:s.data, w:s.w, h:s.h}); }
+        for(let k=0;k<images.length;k++){ const s=await shrinkImage(origs[k]||images[k].data, 1400, 0.85); hi.push({id:uid(), data:s.data, w:s.w, h:s.h}); }
         const ph=makeTaskFromFields({project:'圖片式報告', current:'image report slide '+slideNo}, slideNo);
-        ph._images=hi; ph._imageReport=true; out.push(ph);
+        ph._images=hi; ph._imageReport=true;
+        ph._afterReporter = (lastTaskSlide>=0 && out[lastSectionStart] && out[lastSectionStart].reporter) || '';
+        out.push(ph);
       }
     }
   }
@@ -738,6 +743,16 @@ function computeDelta(oldT,newT){
 }
 function deleteTask(id){ tasks=tasks.filter(t=>t.id!==id); persist(); renderAll(); }
 function resetTasks(){ if(confirm('清空所有任務？(成員名單會保留)')){ tasks=[]; batches=[]; persist(); renderAll(); } }
+// 一鍵清除內容：清掉所有任務、批次與圖片（雲端圖片也一併刪除），成員名單保留。雙重確認避免誤按。
+function clearAllContent(){
+  if(!tasks.length && !batches.length){ toast('目前沒有內容可清除'); return; }
+  if(!confirm('一鍵清除內容：將刪除所有任務與圖片（成員名單會保留）。\n此動作無法復原，確定要清除嗎？')) return;
+  if(!confirm('再次確認：真的要清除全部週報內容嗎？')) return;
+  tasks.forEach(t=>(t.images||[]).forEach(im=>cloudDeleteImage(im.id)));   // 同步刪除雲端圖片
+  tasks=[]; batches=[]; pendingReports=[]; updateOcrBtn();
+  persist(); renderAll();
+  toast('已一鍵清除全部內容（成員名單保留）');
+}
 
 /* =====================================================================
    PROFESSIONAL REWRITE + ANALYSIS
@@ -1119,6 +1134,7 @@ function clearTaskImages(tid){
 }
 function removeTaskImage(tid, imgId){
   const t=tasks.find(x=>x.id===tid); if(!t||!t.images) return;
+  if(!confirm('確定刪除這張圖片？刪除後無法復原。')) return;   // 二次確認，避免誤刪
   t.images=t.images.filter(im=>im.id!==imgId);
   cloudDeleteImage(imgId);
   persist(); renderMembersArea(); if(_openTaskId===tid && !$('#taskModal').hidden) openTask(tid);
@@ -1871,10 +1887,22 @@ function fixCode(s){
 }
 // turn OCR text of a pasted weekly-report table back into task rows.
 // Reporter-driven: only images that carry a "Reporter:" label become tasks (so diagrams/master-lists are skipped).
+// A pasted weekly-report table looks like a report even when OCR garbles it: it has the
+// standard column header (Project Name / Current Job / Due Date) and/or canonical project codes.
+// Used to make sure SOMEONE ELSE's report (a report screenshot pasted after a member's own table)
+// is never silently dumped onto the preceding member as if it were their detail image.
+function looksLikeReportText(text){
+  if(/report[a-z]{0,3}r\s*[:;：]/i.test(text)) return true;           // "Reporter:" even mis-OCR'd as "Reportar:"
+  if(/報告人\s*[:：]/.test(text)) return true;
+  if(/project\s*name/i.test(text) && /(current\s*job|due\s*date|next\s*week)/i.test(text)) return true;
+  const codes=text.match(new RegExp(OCR_CODE_RE.source,'ig'))||[];
+  return codes.length>=2;                                            // 2+ project codes = a project table
+}
 function ocrReportToTasks(text){
-  const rm=text.match(/reporter\s*[:;：]?\s*([A-Za-z][A-Za-z.]+)/i);
+  // fuzzy "Reporter:" — OCR turns it into Reportar/Reporler/Repoter etc. Snap the captured name to a real member.
+  const rm=text.match(/report[a-z]{0,3}r\s*[:;：]?\s*([A-Za-z][A-Za-z.]+)/i) || text.match(/報告人\s*[:：]?\s*([A-Za-z一-鿿]+)/);
   if(!rm) return [];                       // not a personal weekly report -> skip
-  const reporter=rm[1];
+  const reporter=snapName(rm[1]);          // snap a garbled OCR name to the nearest real member
   const lines=text.split('\n').map(l=>l.replace(/\s+/g,' ').trim()).filter(l=>l.length>2);
   const isHeader=l=>/current job|project name|due date|^owner$|^risk|next week job|product category|customer|reporter/i.test(l)&&l.length<70;
   const out=[]; let section='current', last=null;
@@ -1972,7 +2000,7 @@ async function ocrAllReports(silent){
     try{
       const text=await ocrImages(t._images||t.images, ()=>{});
       const rows=ocrReportToTasks(text);
-      const isReport = rows.length>=2 || (rows.length===1 && /reporter/i.test(text));
+      const isReport = rows.length>=1;                    // fuzzy "Reporter:" -> rows only exist for a real personal report
       if(isReport){
         const parsed=convertOcrRows(rows, null);
         const small=await downscaleImgs(t._images||t.images);
@@ -1980,9 +2008,24 @@ async function ocrAllReports(silent){
         const created=overlayTasks(parsed,'圖片報告 OCR');
         made+=parsed.length; kept++;
         lastReportTasks=created; lastReportSlide=slide;
+      } else if(looksLikeReportText(text)){
+        // Clearly SOMEONE's pasted report table, but OCR too garbled to extract the reporter/rows.
+        // It is NOT the preceding member's detail image -> DROP it (do not attach to _afterReporter),
+        // so a member never ends up showing someone else's report screenshot.
+        errs++;
+      } else if(t._afterReporter){
+        // not a report -> it's the detail/measurement image of the TABLE member whose section it sits in.
+        // This takes priority over lastReportTasks: a pasted report may have been OCR'd just above inside
+        // this member's section, but the member's OWN measurements (slides after it) still belong to them.
+        const owner=tasks.filter(x=>!x.imageReport && norm(x.reporter)===norm(t._afterReporter));
+        if(owner.length){
+          const small=await downscaleImgs(t._images||t.images);
+          owner[0].images=(owner[0].images||[]).concat(small);
+        }
       } else if(lastReportTasks && lastReportTasks.length && (slide-lastReportSlide)<=8
                 && !tableSlides.some(s=>s>lastReportSlide && s<slide)){
-        // image page AFTER a report, with NO new person's table in between = that report's test data -> attach to its tasks
+        // fallback (no preceding table member): image page right after a pasted report with no table
+        // in between = that report's own test data -> attach to its tasks.
         const small=await downscaleImgs(t._images||t.images);
         lastReportTasks[0].images=(lastReportTasks[0].images||[]).concat(small);
       }
@@ -2021,6 +2064,7 @@ function wireEvents(){
   $('#memberFileInput').addEventListener('change', async e=>{ const f=e.target.files[0]; if(f){ addMembers(parseMemberText(await f.text()),{manual:true}); toast('已從檔案加入成員'); } e.target.value=''; });
   $('#clearMembersBtn').addEventListener('click', clearMembers);
   $('#resetTasksBtn').addEventListener('click', resetTasks);
+  { const cb=$('#clearAllBtn'); if(cb) cb.addEventListener('click', clearAllContent); }
   $('#loadFromReportBtn').addEventListener('click', ()=>{ if(!tasks.length){ toast('請先匯入週報'); return; } const a=autoAddFromReport(); toast(a.length?('已補齊 '+a.length+' 位成員'):'報告中的負責人都已在名單'); });
   $('#groupSelect').addEventListener('change', e=>switchGroup(e.target.value));
   $('#saveGroupBtn').addEventListener('click', saveGroup);
