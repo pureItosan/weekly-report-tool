@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>週報整合工具 · Weekly Report Hub</title>
-<link rel="stylesheet" href="styles.css?v=260608d">
+<link rel="stylesheet" href="styles.css?v=260608e">
 </head>
 <body>
 <!-- ===== CLOUD LOGIN GATE (online only) ===== -->
@@ -100,7 +100,11 @@
     <section class="panel catalog-panel admin-only">
       <div class="catalog-head">
         <div><p class="eyebrow">PORTFOLIO</p><h2 id="catalogTitle">專案總覽 · Project catalog &amp; task coverage</h2></div>
-        <select id="catalogMember"></select>
+        <div class="cat-tools">
+          <button class="btn sm" id="addProjBtn" title="手動新增一個專案">＋ 新增專案</button>
+          <button class="btn sm" id="importProjListBtn" title="貼上官方專案清單批次建立">📋 貼上專案清單</button>
+          <select id="catalogMember"></select>
+        </div>
       </div>
       <div id="projectCatalog"></div>
     </section>
@@ -223,6 +227,27 @@
   <div class="modal" id="taskModalInner"></div>
 </div>
 
+<!-- ============ PROJECT LIST IMPORT MODAL ============ -->
+<div class="modal-overlay" id="projListModal" hidden>
+  <div class="modal">
+    <div class="modal-head">
+      <h2>📋 貼上專案清單</h2>
+      <button class="icon-btn" data-close>✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="hint">一行一個專案，用 <code>|</code> 分隔欄位（後面欄位可留空）：<br>
+        <code>代號 | 客戶 | 類別 | Chipset | 說明</code><br>
+        例：<code>BXX01.00 | 客戶A | IDU | ChipX / ChipY | 說明文字</code><br>
+        相同代號會自動合併；未知類別會自動建立；現有任務會依代號自動對應。</p>
+      <textarea id="projListText" rows="14" placeholder="BXX01.00 | 客戶A | IDU | ChipX | 說明&#10;BXX02.00 | 客戶B | Module | ChipZ | 說明"></textarea>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" data-close>取消</button>
+      <button class="btn primary" id="projListImportBtn">匯入</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ LIGHTBOX ============ -->
 <div class="lightbox" id="lightbox" hidden><img id="lightboxImg" alt="issue image"></div>
 
@@ -237,6 +262,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>window.FIREBASE_CONFIG={apiKey:"AIzaSyAOeJVOvYfWK3GPisZL9LQlsHovB8VE-yA",authDomain:"spd-weekly.firebaseapp.com",projectId:"spd-weekly",storageBucket:"spd-weekly.firebasestorage.app",messagingSenderId:"322676456894",appId:"1:322676456894:web:1504a8f476a9afecde0def"};</script>
 <!-- bump ?v= on every deploy so browsers (and members) always fetch the latest app.js, never a cached copy -->
-<script src="app.js?v=260608d"></script>
+<script src="app.js?v=260608e"></script>
 </body>
 </html>

@@ -263,8 +263,18 @@ details.cat-group[open]>summary::before{content:"▾"}
 .pc-meta{display:grid;grid-template-columns:150px 170px 1fr;gap:1px;margin:12px 0 4px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .pc-cell{background:#0e1722;padding:9px 12px;font-size:13px}
 .pc-cell.desc{color:#c4d0e0}
-.pc-meta.editing{display:grid;grid-template-columns:150px 170px 1fr auto;gap:8px;border:none}
+.pc-meta.editing{display:flex;flex-wrap:wrap;gap:8px;border:none}
+.pc-meta.editing .pc-in{flex:1 1 150px;min-width:120px}
+.pc-meta.editing .pc-in.wide{flex:1 1 100%}
 .pc-in{font-size:13px}
+/* catalog toolbar (＋ 新增專案 / 貼上清單) */
+.cat-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+/* per-project phase dropdown + chipset + master tag */
+.pc-phase-sel{font-size:11px;font-weight:700;padding:4px 8px;border-radius:6px;background:#1c2430;color:#94a3b8;border:1px solid var(--line);cursor:pointer}
+.pc-phase-sel.has-phase{background:#13283a;color:#5cc8ff;border-color:#1f5170}
+.pc-phase-sel option{background:var(--panel);color:var(--text)}
+.pc-chipset{color:#8aa0bd}
+.master-tag{font-size:10px;font-weight:700;color:#cbb26b;background:#2a2410;border:1px solid #4a3d18;border-radius:5px;padding:1px 6px;vertical-align:middle}
 .pc-tasks{margin-top:8px}
 .pc-tasks summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--accent);padding:8px 10px;background:#11202c;border:1px solid #1a3a4a;border-radius:8px;list-style-position:inside}
 .pc-tasks summary:hover{background:#16293a}
@@ -511,7 +521,11 @@ label.check input{width:auto}
     <section class="panel catalog-panel admin-only">
       <div class="catalog-head">
         <div><p class="eyebrow">PORTFOLIO</p><h2 id="catalogTitle">專案總覽 · Project catalog &amp; task coverage</h2></div>
-        <select id="catalogMember"></select>
+        <div class="cat-tools">
+          <button class="btn sm" id="addProjBtn" title="手動新增一個專案">＋ 新增專案</button>
+          <button class="btn sm" id="importProjListBtn" title="貼上官方專案清單批次建立">📋 貼上專案清單</button>
+          <select id="catalogMember"></select>
+        </div>
       </div>
       <div id="projectCatalog"></div>
     </section>
@@ -632,6 +646,27 @@ label.check input{width:auto}
 <!-- ============ TASK DETAIL MODAL ============ -->
 <div class="modal-overlay" id="taskModal" hidden>
   <div class="modal" id="taskModalInner"></div>
+</div>
+
+<!-- ============ PROJECT LIST IMPORT MODAL ============ -->
+<div class="modal-overlay" id="projListModal" hidden>
+  <div class="modal">
+    <div class="modal-head">
+      <h2>📋 貼上專案清單</h2>
+      <button class="icon-btn" data-close>✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="hint">一行一個專案，用 <code>|</code> 分隔欄位（後面欄位可留空）：<br>
+        <code>代號 | 客戶 | 類別 | Chipset | 說明</code><br>
+        例：<code>BXX01.00 | 客戶A | IDU | ChipX / ChipY | 說明文字</code><br>
+        相同代號會自動合併；未知類別會自動建立；現有任務會依代號自動對應。</p>
+      <textarea id="projListText" rows="14" placeholder="BXX01.00 | 客戶A | IDU | ChipX | 說明&#10;BXX02.00 | 客戶B | Module | ChipZ | 說明"></textarea>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" data-close>取消</button>
+      <button class="btn primary" id="projListImportBtn">匯入</button>
+    </div>
+  </div>
 </div>
 
 <!-- ============ LIGHTBOX ============ -->
@@ -1737,6 +1772,13 @@ function projectGroups(){
     if(isClosed(t)) g.closed++; if(t.risk==='High'&&!isClosed(t)) g.high++;
     if((t.project||'').length>(g.projStr||'').length){ g.projStr=t.project; if(k!=='n:general'&&k!=='n:patent') g.label=t.projectLabel||g.label; }
   });
+  // include master-list projects (manually added / pasted) so the official catalog shows even with 0 tasks;
+  // where a master shares a key with task-derived tasks, prefer the master's official code as the label.
+  Object.keys(projMeta).forEach(k=>{ const m=projMeta[k]; if(!m||!m.master) return;
+    const rk=resolveProjk(k);
+    if(map.has(rk)){ if(m.code) map.get(rk).label=m.code; }
+    else map.set(rk, {projk:rk, label:(m.code||k.replace(/^[a-z]+:/,'').toUpperCase()), tasks:[], mem:new Set(), closed:0, high:0, projStr:m.code||'', master:true});
+  });
   return [...map.values()].sort((a,b)=>b.tasks.length-a.tasks.length);
 }
 function mergeProjects(fromProjk, toProjk){
@@ -1782,15 +1824,64 @@ function setProjCategory(projk, cat){
   projMeta[projk]=m; persist(); renderCatalog(); renderStats();
 }
 function deleteProjectGroup(projk){
-  const g=projectGroups().find(x=>x.projk===resolveProjk(projk)); if(!g) return;
-  if(!confirm('刪除專案「'+g.label+'」及其 '+g.tasks.length+' 筆任務？此動作無法復原。')) return;
-  if(!confirm('再次確認：真的要刪除「'+g.label+'」嗎？')) return;
+  const rk=resolveProjk(projk);
+  const g=projectGroups().find(x=>x.projk===rk); if(!g) return;
+  const tn=g.tasks.length;
+  if(!confirm('刪除專案「'+g.label+'」'+(tn?('及其 '+tn+' 筆任務'):'（無任務）')+'？此動作無法復原。')) return;
+  if(tn && !confirm('再次確認：真的要刪除「'+g.label+'」及其任務嗎？')) return;
   const ids=new Set(g.tasks.map(t=>t.id));
   tasks.forEach(t=>{ if(ids.has(t.id)) (t.images||[]).forEach(im=>cloudDeleteImage(im.id)); });  // sync-delete cloud images
   tasks=tasks.filter(t=>!ids.has(t.id));
-  delete projMeta[g.projk];
+  delete projMeta[g.projk]; delete projMeta[projk];                 // also drop its master record
   persist(); renderAll(); toast('已刪除專案：'+g.label);
 }
+/* ---------- PROJECT MASTER LIST (manually added / pasted, stored in your cloud — never in the repo) ---------- */
+const PHASES=['','Kickoff','ES','EVT','DVT','PVT','MP','Done','Hold'];   // '' = 未設定階段
+function projMasterKey(code){                          // key a master project the SAME way tasks are keyed, so they auto-link
+  let k=projKeyOf(code);
+  if(k==='n:general'||k==='n:patent'){ const nn=norm(code); if(nn) k='c:'+nn; }   // codeless names get their own bucket
+  return k;
+}
+function mergeField(a,b){                               // union of "/"-separated values, de-duped ("A" + "B" -> "A / B")
+  a=String(a||'').trim(); b=String(b||'').trim(); if(!b) return a; if(!a) return b;
+  const out=[]; (a+' / '+b).split(/\s*\/\s*/).forEach(x=>{ x=x.trim(); if(x && !out.some(y=>y.toLowerCase()===x.toLowerCase())) out.push(x); });
+  return out.join(' / ');
+}
+function parseProjectList(text){                        // one project per line: 代號 | 客戶 | 類別 | Chipset | 說明
+  return String(text||'').split('\n').map(l=>l.trim()).filter(Boolean).map(line=>{
+    if(/^(代號|code|customer|客戶)\b/i.test(line)) return null;   // skip a header row
+    const p=line.split('|').map(s=>s.trim());
+    if(p.length<2 || !p[0]) return null;
+    return {code:p[0], customer:p[1]||'', category:p[2]||'', chipset:p[3]||'', desc:p[4]||''};
+  }).filter(Boolean);
+}
+function importProjectList(text){
+  const rows=parseProjectList(text);
+  if(!rows.length){ toast('沒有解析到專案。格式：代號 | 客戶 | 類別 | Chipset | 說明'); return; }
+  rows.forEach(r=>{
+    const k=projMasterKey(r.code);
+    let cat=r.category||'';
+    if(cat && cat!=='General' && !allCats().some(c=>c.toLowerCase()===cat.toLowerCase())){
+      if(!projCats.includes(cat)) projCats.push(cat);          // auto-create unknown categories (e.g. LBR)
+    } else if(cat){ cat=allCats().find(c=>c.toLowerCase()===cat.toLowerCase())||cat; }   // normalise case
+    const ex=projMeta[k]||{};
+    projMeta[k]=Object.assign({}, ex, { master:true,
+      code:mergeField(ex.code,r.code), customer:mergeField(ex.customer,r.customer),
+      category:cat||ex.category||'', chipset:mergeField(ex.chipset,r.chipset), desc:mergeField(ex.desc,r.desc) });
+  });
+  const uniq=new Set(rows.map(r=>projMasterKey(r.code))).size;
+  persist(); renderCatalog(); renderStats();
+  $('#projListModal').hidden=true;
+  toast('已匯入 '+rows.length+' 行，合併為 '+uniq+' 個專案');
+}
+function addBlankProject(){
+  const code=prompt('新增專案代號（例：B01W050.00）：'); if(!code||!code.trim()) return;
+  const k=projMasterKey(code);
+  projMeta[k]=Object.assign({master:true, code:code.trim()}, projMeta[k]||{}, {master:true});
+  editingProj=k; persist(); renderCatalog();
+  const card=document.querySelector(`[data-projk="${k}"]`); if(card) card.scrollIntoView({behavior:'smooth',block:'center'});
+}
+function setProjPhase(projk, phase){ const m=projMeta[projk]||{}; m.phase=phase||''; projMeta[projk]=m; persist(); renderCatalog(); }
 function inferCategory(projStr){
   const s=String(projStr||'').toLowerCase();
   if(/dongle|\bdg\d|redcap/.test(s)) return 'Dongle';
@@ -1842,16 +1933,20 @@ function catalogCard(g){
   const ed=editingProj===g.projk;
   const sub=`${g.tasks.length} tasks · ${g.mem.size} members · ${g.high} high risk · ${g.closed} closed`;
   const curCat=projCategory(g);
+  const curPhase=meta.phase||'';
+  const phaseSel=`<select class="pc-phase-sel${curPhase?' has-phase':''}" data-setphase="${esc(g.projk)}" title="專案階段 / Phase">${PHASES.map(p=>`<option value="${esc(p)}" ${curPhase===p?'selected':''}>${p||'階段…'}</option>`).join('')}</select>`;
   // read view: a category dropdown is ALWAYS shown — change it to recategorize instantly (no Edit mode needed)
   const catSelectRead=`<select class="pc-cat-sel cat-${esc(curCat)}" data-setcat="${esc(g.projk)}" title="變更分類">${allCats().map(c=>`<option ${curCat===c?'selected':''}>${esc(c)}</option>`).join('')}</select>`;
-  // edit mode: category is part of the form, saved together with Customer/說明 on 儲存 (no premature re-render)
+  // edit mode: category is part of the form, saved together with the other fields on 儲存 (no premature re-render)
   const catSelectEdit=`<select class="pc-in" data-mf="category">${['',...allCats()].map(c=>`<option value="${esc(c)}" ${(meta.category||curCat)===c?'selected':''}>${c||'(類別)'}</option>`).join('')}</select>`;
   const metaRow = ed
     ? `<div class="pc-meta editing">
-         <input class="pc-in" data-mf="customer" placeholder="Customer" value="${esc(meta.customer||'')}">
+         <input class="pc-in" data-mf="code" placeholder="代號 Code" value="${esc(meta.code||'')}">
+         <input class="pc-in" data-mf="customer" placeholder="客戶 Customer" value="${esc(meta.customer||'')}">
          ${catSelectEdit}
-         <input class="pc-in" data-mf="desc" placeholder="Description" value="${esc(desc)}">
-         <button class="btn sm primary" data-save-proj="${g.projk}">儲存</button>
+         <input class="pc-in" data-mf="chipset" placeholder="Chipset" value="${esc(meta.chipset||'')}">
+         <input class="pc-in wide" data-mf="desc" placeholder="說明 Description" value="${esc(desc)}">
+         <button class="btn sm primary" data-save-proj="${esc(g.projk)}">儲存</button>
        </div>`
     : `<div class="pc-meta">
          <div class="pc-cell">${esc(meta.customer||'—')}</div>
@@ -1859,13 +1954,16 @@ function catalogCard(g){
          <div class="pc-cell desc">${esc(desc)}</div>
        </div>`;
   const merged=Object.keys(projMerge).filter(k=>resolveProjk(k)===g.projk).length;
+  const chipLine=meta.chipset?` · <span class="pc-chipset">Chipset: ${esc(meta.chipset)}</span>`:'';
+  const masterTag=(meta.master&&!g.tasks.length)?' <span class="master-tag" title="主檔專案（尚無任務）">主檔</span>':'';
   return `<div class="proj-card cat-b-${esc(curCat)}" draggable="true" data-projk="${esc(g.projk)}">
     <div class="pc-head">
-      <div><h3><span class="drag-dot" title="拖曳此專案併到另一個">⠿</span> ${esc(g.label)}${merged?` <span class="merged-tag" title="已併入其他專案">＋${merged} 併</span>`:''}</h3><div class="pc-sub">${sub}</div></div>
+      <div><h3><span class="drag-dot" title="拖曳此專案併到另一個">⠿</span> ${esc(g.label)}${masterTag}${merged?` <span class="merged-tag" title="已併入其他專案">＋${merged} 併</span>`:''}</h3><div class="pc-sub">${sub}${chipLine}</div></div>
       <div class="pc-actions">
+        ${phaseSel}
         ${merged?`<button class="btn sm" data-unmerge="${esc(g.projk)}" title="取消併入">↩ 取消併</button>`:''}
-        <button class="btn sm" data-edit-proj="${g.projk}">${ed?'取消':'✎ Edit'}</button>
-        <button class="btn sm danger" data-delproj="${esc(g.projk)}" title="刪除此專案與其任務">🗑</button>
+        <button class="btn sm" data-edit-proj="${esc(g.projk)}">${ed?'取消':'✎ Edit'}</button>
+        <button class="btn sm danger" data-delproj="${esc(g.projk)}" title="刪除此專案">🗑</button>
       </div>
     </div>
     ${metaRow}
@@ -1948,7 +2046,8 @@ function removeTaskOwner(id, mid){
   t.manualOwners=true; t.shared=t.ownerIds.length>1; persist(); renderAll();
 }
 function saveProjMeta(projk, card){
-  const m={}; card.querySelectorAll('.pc-in').forEach(inp=>{ m[inp.dataset.mf]=inp.value.trim(); });
+  const m=Object.assign({}, projMeta[projk]||{});   // keep existing fields (master/code/phase/chipset/schedule…)
+  card.querySelectorAll('.pc-in').forEach(inp=>{ m[inp.dataset.mf]=inp.value.trim(); });
   projMeta[projk]=m; editingProj=''; persist(); renderCatalog();
 }
 function renderCharts(){
@@ -2897,6 +2996,9 @@ function wireEvents(){
   $('#narrCopyBtn').addEventListener('click', ()=>{ navigator.clipboard&&navigator.clipboard.writeText($('#narrativeText').textContent); toast('已複製 narrative 文字'); });
   $('#narrExportBtn').addEventListener('click', ()=>{ const mid=$('#narrMember').value; exportWord(mid?[mid]:null); });
   $('#applyAliasBtn').addEventListener('click', ()=>applyProjAliases($('#aliasText').value));
+  { const a=$('#addProjBtn'); if(a) a.addEventListener('click', addBlankProject); }
+  { const b=$('#importProjListBtn'); if(b) b.addEventListener('click', ()=>{ $('#projListModal').hidden=false; }); }
+  { const c=$('#projListImportBtn'); if(c) c.addEventListener('click', ()=>importProjectList($('#projListText').value)); }
   $('#aliasText').value=aliasToText();
   $('#wbSaveBtn').addEventListener('click', saveWorkbench);
   $('#wbOcrBtn').addEventListener('click', ocrToWorkbench);
@@ -2945,6 +3047,7 @@ function wireEvents(){
     if(el.dataset.setcname!==undefined){ setMemberCname(el.dataset.setcname, el.value); return; }
     if(el.dataset.addimg!==undefined){ addTaskImages(el.dataset.addimg, el.files); el.value=''; return; }
     if(el.dataset.setcat!==undefined){ setProjCategory(el.dataset.setcat, el.value); return; }
+    if(el.dataset.setphase!==undefined){ setProjPhase(el.dataset.setphase, el.value); return; }
     if(el.dataset.edit && el.dataset.tid){ editTaskField(el.dataset.tid, el.dataset.edit, el.value); return; }
     if(el.dataset.addowner){ addTaskOwner(el.dataset.addowner, el.value); el.value=''; return; }
   });
