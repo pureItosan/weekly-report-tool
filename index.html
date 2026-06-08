@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>週報整合工具 · Weekly Report Hub</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">📋</span>
+    <div>
+      <h1>週報整合工具</h1>
+      <p class="sub">Weekly Report Hub · 部門週報匯入 / 對應 / 疊加 / 匯出</p>
+    </div>
+  </div>
+  <div class="top-actions">
+    <label class="btn primary">
+      ⬆ 匯入週報檔
+      <input type="file" id="reportInput" accept=".pptx,.docx,.xlsx,.txt,.csv" multiple hidden>
+    </label>
+    <button class="btn" id="openWorkbenchBtn">✍ 成員工作台</button>
+    <button class="btn" id="ocrReportsBtn">🔍 OCR 圖片報告</button>
+    <button class="btn" id="previewBtn">👁 Word 預覽</button>
+    <button class="btn" id="exportAllBtn">⬇ 匯出全部 Word</button>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- ============ LEFT SIDEBAR ============ -->
+  <aside class="sidebar">
+    <section class="panel">
+      <h2>成員名單 <span class="pill" id="memberCount">0</span></h2>
+      <p class="hint">貼上或上傳成員清單。一行一位，可寫別名與專業：<br><code>Raveendra: Ravi, Rav</code> &nbsp;<code>Aaron [RF]</code><br>專業也可在下方每個人的下拉選單設定（Leader/EE/RF/ANT）。</p>
+      <textarea id="memberPaste" rows="5" placeholder="David&#10;Mei&#10;Raveendra: Ravi&#10;Eric&#10;Isha"></textarea>
+      <div class="row">
+        <button class="btn sm primary" id="addMembersBtn">加入名單</button>
+        <label class="btn sm">上傳清單<input type="file" id="memberFileInput" accept=".txt,.csv" hidden></label>
+        <button class="btn sm danger" id="clearMembersBtn">清空名單</button>
+      </div>
+      <div class="row">
+        <button class="btn sm" id="loadFromReportBtn">＋ 從報告補齊成員</button>
+      </div>
+      <label class="check"><input type="checkbox" id="autoAddChk"> 匯入報告時，自動把報告中的負責人加入名單</label>
+      <label class="check"><input type="checkbox" id="fuzzyChk"> 模糊比對：暱稱／部分相符也算同一人（如 Ravi→Raveendra）</label>
+      <ul class="member-chips" id="memberChips"></ul>
+    </section>
+
+    <section class="panel">
+      <h2>報告批次</h2>
+      <p class="hint">疊加式：新報告不覆蓋舊任務，會標示 New / Updated / Unchanged。</p>
+      <ul class="batch-list" id="batchList"></ul>
+      <button class="btn sm danger" id="resetTasksBtn">清空所有任務</button>
+    </section>
+
+    <section class="panel">
+      <h2>專案歸併（選填）</h2>
+      <p class="hint">把不同寫法歸成同一專案。一行一組，格式：<br><code>標籤: 名稱1, 名稱2</code><br>例：<code>ID506: SDX85, Qualcomm, B01W046</code></p>
+      <textarea id="aliasText" rows="3" placeholder="ID506: SDX85, Qualcomm, B01W046"></textarea>
+      <button class="btn sm primary" id="applyAliasBtn" style="margin-top:8px">套用歸併</button>
+    </section>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main class="main">
+    <section class="stats" id="statsRow"></section>
+    <p class="nav-hint">↑ 點上方方塊切換檢視（專案／成員／已結案／高風險／工作量）</p>
+
+    <section class="panel catalog-panel">
+      <div class="catalog-head">
+        <div><p class="eyebrow">PORTFOLIO</p><h2 id="catalogTitle">專案總覽 · Project catalog &amp; task coverage</h2></div>
+        <select id="catalogMember"></select>
+      </div>
+      <div id="projectCatalog"></div>
+    </section>
+
+    <section class="charts one">
+      <div class="panel chart-block">
+        <h3>🧑‍💻 成員工作量 <span class="ch-sub" id="wlChartSub"></span></h3>
+        <div id="workloadChart" class="chart-list"></div>
+      </div>
+    </section>
+
+    <section class="filterbar">
+      <input id="filterQ" placeholder="🔍 搜尋專案 / 工作內容">
+      <select id="filterProject"></select>
+      <select id="filterMember"></select>
+      <select id="filterRole">
+        <option value="">全部專業</option>
+        <option value="Leader">Leader</option>
+        <option value="EE">EE</option>
+        <option value="RF">RF</option>
+        <option value="ANT">ANT</option>
+        <option value="SW">SW</option>
+        <option value="PM">PM</option>
+        <option value="QA">QA</option>
+      </select>
+      <select id="filterStatus">
+        <option value="">全部狀態</option>
+        <option value="active">進行中</option>
+        <option value="closed">已結案</option>
+        <option value="highrisk">高風險</option>
+        <option value="New">New</option>
+        <option value="Updated">Updated</option>
+      </select>
+      <label class="check"><input type="checkbox" id="hideEmptyChk"> 只顯示有任務的成員</label>
+      <button class="btn sm" id="clearFiltersBtn">清除篩選</button>
+      <span id="filterCount" class="hint"></span>
+    </section>
+
+    <section class="members-area" id="membersArea"></section>
+  </main>
+</div>
+
+<!-- ============ WORKBENCH MODAL ============ -->
+<div class="modal-overlay" id="workbenchModal" hidden>
+  <div class="modal">
+    <div class="modal-head">
+      <h2>成員工作台 · 輸入本週工作</h2>
+      <button class="icon-btn" data-close>✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <label>成員
+          <select id="wbMember"></select>
+        </label>
+        <label>Project
+          <input id="wbProject" placeholder="e.g. Sensor Firmware v2.1">
+        </label>
+        <label>Risk
+          <select id="wbRisk"><option>Low</option><option>Medium</option><option>High</option></select>
+        </label>
+        <label>Due date
+          <input id="wbDue" type="date">
+        </label>
+        <label>Progress (%)
+          <input id="wbProgress" type="number" min="0" max="100" value="0">
+        </label>
+        <label>Complexity
+          <select id="wbComplexity"><option>Low</option><option>Medium</option><option>High</option></select>
+        </label>
+      </div>
+
+      <label class="full">This week (本週工作)
+        <textarea id="wbThisWeek" rows="3" placeholder="描述本週完成 / 進行中的工作"></textarea>
+      </label>
+      <div class="phrase-row" id="phraseRow"></div>
+
+      <label class="full">Issue / Note
+        <textarea id="wbIssue" rows="2" placeholder="遇到的問題或備註"></textarea>
+      </label>
+      <label class="full">Next week (下週計畫)
+        <textarea id="wbNext" rows="2" placeholder="下週規劃"></textarea>
+      </label>
+
+      <div class="img-uploader">
+        <label class="btn sm">📎 上傳 Issue 圖片<input type="file" id="wbImages" accept="image/*" multiple hidden></label>
+        <button class="btn sm" id="wbOcrBtn" type="button">🔍 OCR 圖片文字 → This week</button>
+        <div class="thumb-strip" id="wbThumbs"></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" data-close>取消</button>
+      <button class="btn primary" id="wbSaveBtn">儲存任務</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ WEEKLY NARRATIVE PREVIEW MODAL ============ -->
+<div class="modal-overlay" id="narrativeModal" hidden>
+  <div class="modal">
+    <div class="modal-head">
+      <h2>👁 Weekly Narrative 預覽</h2>
+      <div class="head-actions">
+        <select id="narrMember"></select>
+        <button class="icon-btn" data-close>✕</button>
+      </div>
+    </div>
+    <div class="modal-body"><pre class="narrative" id="narrativeText"></pre></div>
+    <div class="modal-foot">
+      <button class="btn" id="narrCopyBtn">📋 複製文字</button>
+      <button class="btn primary" id="narrExportBtn">⬇ 匯出 Word</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ TASK DETAIL MODAL ============ -->
+<div class="modal-overlay" id="taskModal" hidden>
+  <div class="modal" id="taskModalInner"></div>
+</div>
+
+<!-- ============ LIGHTBOX ============ -->
+<div class="lightbox" id="lightbox" hidden><img id="lightboxImg" alt="issue image"></div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="vendor/jszip.min.js"></script>
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

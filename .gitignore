@@ -1,0 +1,14 @@
+# Confidential: real company weekly reports — NEVER commit these.
+# (real.pptx is your actual report; only the synthetic test.pptx demo is allowed)
+*.pptx
+!test.pptx
+*.docx
+*.xlsx
+
+# Local dev / preview config
+.claude/
+
+# OS junk
+Thumbs.db
+.DS_Store
+desktop.ini
