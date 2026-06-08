@@ -225,6 +225,9 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--accent)}
 .dd-rowthumb{width:56px;height:42px;object-fit:cover;border-radius:5px;background:#fff;cursor:zoom-in;flex:none}
 .dd-rowtitle{flex:1;font-size:13px;color:#dbe4f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dd-row .img-del{position:static;flex:none}
+/* build version badges (so you can tell at a glance you're on the latest) */
+.cg-ver{font-size:12px;color:#8aa0bd;margin:-4px 0 14px}
+.build-badge{font-size:11px;color:#8aa0bd;background:#11202c;border:1px solid #1a3a4a;border-radius:6px;padding:2px 7px;align-self:center}
 /* schedule attach row */
 .sched-attach{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
 .sched-refs{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px}

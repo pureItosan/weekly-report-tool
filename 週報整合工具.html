@@ -235,6 +235,9 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--accent)}
 .dd-rowthumb{width:56px;height:42px;object-fit:cover;border-radius:5px;background:#fff;cursor:zoom-in;flex:none}
 .dd-rowtitle{flex:1;font-size:13px;color:#dbe4f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dd-row .img-del{position:static;flex:none}
+/* build version badges (so you can tell at a glance you're on the latest) */
+.cg-ver{font-size:12px;color:#8aa0bd;margin:-4px 0 14px}
+.build-badge{font-size:11px;color:#8aa0bd;background:#11202c;border:1px solid #1a3a4a;border-radius:6px;padding:2px 7px;align-self:center}
 /* schedule attach row */
 .sched-attach{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
 .sched-refs{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px}
@@ -504,6 +507,7 @@ label.check input{width:auto}
   <div class="cg-box">
     <div class="cg-logo">📋</div>
     <h2>週報整合工具</h2>
+    <div class="cg-ver">版本 build 260609c</div>
     <div id="cgPassWrap">
       <p class="cg-sub">請輸入團隊通行碼登入</p>
       <input type="password" id="cgPass" placeholder="團隊通行碼" autocomplete="current-password">
@@ -537,6 +541,7 @@ label.check input{width:auto}
     <button class="btn admin-only" id="exportPptxBtn">📊 匯出 PPTX</button>
     <button class="btn danger admin-only" id="clearAllBtn" title="清除所有任務與圖片（成員名單保留）">🧹 一鍵清除內容</button>
     <span class="cloud-info" id="cloudWho"></span>
+    <span class="build-badge" title="目前載入的程式版本">b260609c</span>
     <button class="btn sm cloud-info" id="cloudLogout" hidden>登出</button>
   </div>
 </header>
