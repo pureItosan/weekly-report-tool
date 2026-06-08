@@ -148,6 +148,17 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--accent)}
 .cat-ODU{background:#3a2e08;color:#f59e0b;border:1px solid #5a4818}
 .cat-Dongle{background:#241a3a;color:#a78bfa;border:1px solid #3a2d5a}
 .cat-General,.cat-其他,.cat-{background:#1c2430;color:#94a3b8;border:1px solid var(--line)}
+/* category management bar */
+.cat-mgr{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:0 0 14px;padding:10px 12px;background:var(--panel2);border:1px solid var(--line);border-radius:10px}
+.cat-mgr-label{font-size:12px;font-weight:700;color:var(--muted);margin-right:2px}
+.cat-chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;padding:3px 8px;border-radius:6px;letter-spacing:.3px}
+.cat-chip .cc-x{background:transparent;border:none;color:inherit;opacity:.6;cursor:pointer;font-size:11px;padding:0 2px;line-height:1}
+.cat-chip .cc-x:hover{opacity:1}
+/* inline category dropdown on each project card */
+.pc-cat-sel{width:100%;border:none;background:transparent;color:var(--text);font-size:12px;font-weight:700;padding:6px 8px;cursor:pointer;border-radius:6px}
+.pc-cat-sel:hover{background:#1c2a40}
+.pc-cat-sel:focus{outline:1px solid var(--accent)}
+.pc-cat-sel option{background:var(--panel);color:var(--text);font-weight:600}
 
 /* secondary role badge + two selects */
 .role-badge.sub{opacity:.72;font-weight:600}
