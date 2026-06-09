@@ -36,7 +36,7 @@ h1,h2,h3{margin:0}
 code{background:#0c1118;padding:1px 5px;border-radius:5px;color:var(--accent2);font-size:12px}
 
 /* topbar */
-.topbar{display:flex;justify-content:space-between;align-items:center;
+.topbar{display:flex;flex-wrap:wrap;align-items:center;column-gap:18px;row-gap:11px;
   padding:13px 22px;background:linear-gradient(100deg,rgba(15,25,39,.97),rgba(25,40,63,.95));
   backdrop-filter:blur(12px) saturate(1.15);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20;
   box-shadow:0 6px 26px -8px rgba(0,0,0,.55)}
@@ -45,7 +45,8 @@ code{background:#0c1118;padding:1px 5px;border-radius:5px;color:var(--accent2);f
 .topbar h1{font-size:21px;font-weight:760;letter-spacing:.2px;
   background:linear-gradient(90deg,#eaf2ff,#a8cdff);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
 .sub{margin:2px 0 0;color:var(--muted);font-size:12.5px}
-.top-actions{display:flex;gap:8px;flex-wrap:wrap}
+.session-info{display:flex;align-items:center;gap:9px;order:1;margin-left:auto}
+.top-actions{display:flex;gap:8px;flex-wrap:wrap;order:2;flex-basis:100%}
 
 /* buttons */
 .btn{background:linear-gradient(180deg,#23304657,#1a2536);color:var(--text);border:1px solid var(--line);
@@ -541,7 +542,7 @@ label.check input{width:auto}
   <div class="cg-box">
     <div class="cg-logo">📋</div>
     <h2>Weekly Report Hub</h2>
-    <div class="cg-ver">build 260609i</div>
+    <div class="cg-ver">build 260609j</div>
     <div id="cgPassWrap">
       <p class="cg-sub">Enter your team passcode to sign in</p>
       <input type="password" id="cgPass" placeholder="Team passcode" autocomplete="current-password">
@@ -574,8 +575,10 @@ label.check input{width:auto}
     <button class="btn admin-only" id="exportAllBtn">⬇ Export Word</button>
     <button class="btn admin-only" id="exportPptxBtn">📊 Export PPTX</button>
     <button class="btn danger admin-only" id="clearAllBtn" title="Clear all tasks &amp; images (member list kept)">🧹 Clear all</button>
+  </div>
+  <div class="session-info">
     <span class="cloud-info" id="cloudWho"></span>
-    <span class="build-badge" title="Currently loaded app build">b260609i</span>
+    <span class="build-badge" title="Currently loaded app build">b260609j</span>
     <button class="btn sm cloud-info" id="cloudLogout" hidden>Sign out</button>
   </div>
 </header>
