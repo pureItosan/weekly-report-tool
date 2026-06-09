@@ -455,7 +455,7 @@ label.check input{width:auto}
 .card .card-del:hover{color:var(--danger)}
 
 /* modal */
-.modal-overlay{position:fixed;inset:0;background:rgba(4,8,14,.76);
+.modal-overlay{position:fixed;inset:0;background:#070b13;
   display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}
 .modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;width:min(720px,100%);
   max-height:90vh;display:flex;flex-direction:column;box-shadow:var(--shadow)}
@@ -522,7 +522,7 @@ label.check input{width:auto}
   .charts{grid-template-columns:1fr}.form-grid{grid-template-columns:1fr}}
 
 /* ===== polish v2 — more depth & detail (structure unchanged) ===== */
-.modal-overlay{background:rgba(6,9,15,.76)}
+.modal-overlay{background:#070b13}   /* fully opaque so the busy page behind is occluded (not re-painted) — modal pops instantly */
 .modal{border-radius:18px;box-shadow:0 44px 100px -34px rgba(0,0,0,.85),0 0 0 1px rgba(255,255,255,.04)}
 .member-chips li{transition:border-color .15s,transform .12s,box-shadow .15s;box-shadow:var(--shadow-sm)}
 .member-chips li:hover{transform:translateX(2px);border-color:var(--line-soft)}
@@ -654,7 +654,7 @@ select.proj-edit{width:100%;min-width:210px}
   <div class="cg-box">
     <div class="cg-logo">📋</div>
     <h2>Weekly Report Hub</h2>
-    <div class="cg-ver">build 260609zf</div>
+    <div class="cg-ver">build 260609zg</div>
     <div id="cgPassWrap">
       <p class="cg-sub">Enter your team passcode to sign in</p>
       <input type="password" id="cgPass" placeholder="Team passcode" autocomplete="current-password">
@@ -681,7 +681,7 @@ select.proj-edit{width:100%;min-width:210px}
   </div>
   <div class="session-info">
     <span class="cloud-info" id="cloudWho"></span>
-    <span class="build-badge" title="Currently loaded app build">b260609zf</span>
+    <span class="build-badge" title="Currently loaded app build">b260609zg</span>
     <button class="btn sm cloud-info" id="cloudLogout" hidden>Sign out</button>
   </div>
 </header>
