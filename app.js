@@ -1957,8 +1957,7 @@ function openTask(id){
       <textarea class="task-edit analysis-edit" data-edit="analysis" data-tid="${t.id}" rows="3" placeholder="Issue analysis">${esc(t.analysis||generateAnalysis(t))}</textarea>
       <div class="section-title">Attachments (delete one-by-one or clear all; exports and cloud stay in sync)
         ${(t.images||[]).length?`<button class="btn xs danger clearimg-btn" data-clearimg="${t.id}">🗑 Clear all (${t.images.length})</button>`:''}</div>
-      <div class="imgs editable">
-        ${(t.images||[]).map(im=>`<span class="img-edit"><img src="${im.data}" data-light="${im.id}" loading="lazy" decoding="async"><button class="img-del" data-delimg="${t.id}|${im.id}" title="Delete this image">✕</button></span>`).join('')}
+      <div class="imgs editable" id="taskImgsBox">
         <label class="img-add" title="Add / replace images">＋ Image<input type="file" accept="image/*" multiple hidden data-addimg="${t.id}"></label>
       </div>
     </div>
@@ -1969,6 +1968,12 @@ function openTask(id){
       <button class="btn" data-close>Close</button>
     </div>`;
   $('#taskModal').hidden=false;
+  // defer the heavy base64 attachments so the modal pops open instantly; w/h avoid a layout-time decode
+  if((t.images||[]).length){
+    const html=t.images.map(im=>`<span class="img-edit"><img src="${im.data}" data-light="${im.id}"${im.w&&im.h?` width="${im.w}" height="${im.h}"`:''} loading="lazy" decoding="async"><button class="img-del" data-delimg="${t.id}|${im.id}" title="Delete this image">✕</button></span>`).join('');
+    requestAnimationFrame(()=>{ const box=$('#taskImgsBox'), add=box&&box.querySelector('.img-add');
+      if(add && _openTaskId===t.id) add.insertAdjacentHTML('beforebegin', html); });
+  }
 }
 
 /* ---------- project drill-down: all tasks under a project ---------- */
