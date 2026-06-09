@@ -1520,7 +1520,10 @@ function projTypeOrder(types){
   const cats=allCats();
   return Object.keys(types).sort((a,b)=>{ const ia=cats.indexOf(a), ib=cats.indexOf(b); return (ia<0?99:ia)-(ib<0?99:ib); });
 }
+// Matrix & Tree show the OFFICIAL master projects (the imported matrix); task-only groups stay in Cards.
+function masterOnly(groups){ const mg=groups.filter(g=>(projMeta[g.projk]||{}).master); return mg.length?mg:groups; }
 function renderMatrixHTML(groups){
+  groups=masterOnly(groups);
   const types=projTree(groups);
   let html='<div class="pmatrix-wrap">';
   projTypeOrder(types).forEach(ty=>{
@@ -1550,6 +1553,7 @@ function renderMatrixHTML(groups){
   return html+'</div>';
 }
 function renderTreeHTML(groups){
+  groups=masterOnly(groups);
   const types=projTree(groups);
   let html='<div class="ptree-wrap">';
   projTypeOrder(types).forEach(ty=>{
