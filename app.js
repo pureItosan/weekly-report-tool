@@ -1025,12 +1025,12 @@ function renderStats(){
   // each stat card doubles as navigation: [icon, value, label, colorClass, view, statusFilter].
   // special view '__docs__' -> opens the global Design Documents library (replaces the old 完成率 box).
   const cards=[
-    ['📁', projCount, 'Projects', '', 'catalog', ''],
-    ['👥', members.length, 'Members', '', 'members', ''],
-    ['📋', total, 'Tasks', '', 'members', ''],
-    ['✅', closed+'/'+total, 'Closed', 'ok', 'members', 'closed'],
+    ['📁', projCount, 'Projects', '', 'projects', ''],
+    ['👥', members.length, 'Members', '', 'team', ''],
+    ['📋', total, 'Tasks', '', 'tasks', ''],
+    ['✅', closed+'/'+total, 'Closed', 'ok', 'tasks', 'closed'],
     ['📐', docCount, 'Design Docs', 'accent', '__docs__', ''],
-    ['⚠️', high, 'High risk', 'warn', 'members', 'highrisk'],
+    ['⚠️', high, 'High risk', 'warn', 'tasks', 'highrisk'],
   ];
   $('#statsRow').innerHTML=cards.map(([ic,n,l,c,view,flt])=>{
     if(view==='__docs__') return `<div class="stat nav ${c}" data-designdocs="1"><div class="st-ic">${ic}</div><div><div class="num">${n}</div><div class="lbl">${l}</div></div></div>`;
@@ -2715,6 +2715,7 @@ function wireEvents(){
     const t=e.target;
     if(t.closest('[data-close]')){ t.closest('.modal-overlay').hidden=true; return; }
     if(t.closest('[data-designdocs]')){ openDesignDocs(); return; }
+    { const vt=t.closest('#viewTabs .vt'); if(vt){ setView(vt.dataset.view); renderStats(); return; } }
     const navCard=t.closest('[data-nav]'); if(navCard){ navStat(navCard.dataset.nav, navCard.dataset.flt); return; }
     if(t.closest('.mname') && t.closest('.mchip')){ jumpToMember(t.closest('.mchip').dataset.mid); return; }
     if(t.dataset.delMember){ deleteMember(t.dataset.delMember); return; }
@@ -2781,15 +2782,16 @@ function wireEvents(){
 function openLight(src){ $('#lightboxImg').src=src; $('#lightbox').hidden=false; }
 
 /* ---------- view tabs (less scrolling) ---------- */
-let currentView=store.load('wrt_view','catalog');
+let currentView=store.load('wrt_view','dashboard');
 function setView(v){
+  const MIGRATE={catalog:'dashboard', members:'dashboard', workload:'dashboard'};   // old IA view names -> land on the new Dashboard
+  v=MIGRATE[v]||v;
+  if(!['dashboard','projects','tasks','team'].includes(v)) v='dashboard';
   currentView=v; store.save('wrt_view',v);
-  const show=(sel,on)=>{ const e=document.querySelector(sel); if(e) e.style.display=on?'':'none'; };
-  show('.catalog-panel', v==='catalog');
-  show('.charts', v==='workload');
-  show('.filterbar', v==='members');
-  show('.members-area', v==='members');
-  $$('#viewTabs button').forEach(b=>b.classList.toggle('active', b.dataset.view===v));
+  document.querySelectorAll('[data-pane]').forEach(el=>{
+    el.style.display = el.getAttribute('data-pane').split(/\s+/).includes(v) ? '' : 'none';
+  });
+  $$('#viewTabs .vt').forEach(b=>b.classList.toggle('active', b.dataset.view===v));
 }
 
 /* ---------- drag a project card onto another to merge / correct grouping ---------- */

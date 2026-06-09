@@ -68,7 +68,12 @@ code{background:#0c1118;padding:1px 5px;border-radius:5px;color:var(--accent2);f
   flex:1;min-height:0;overflow:hidden}                       /* fill viewport; columns scroll on their own */
 .sidebar{display:flex;flex-direction:column;gap:16px;min-height:0;overflow-y:auto;padding-right:6px}
 .sidebar>*{flex:none}                                        /* panels keep their height -> sidebar scrolls */
-.main{min-height:0;overflow-y:auto;padding-right:6px}        /* report column scrolls independently */
+.main{flex:1;min-height:0;overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:16px}
+/* top view tabs: Dashboard / Projects / Tasks / Team */
+.view-tabs{display:flex;gap:2px;padding:0 24px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap;flex:none;box-shadow:var(--shadow-sm)}
+.vt{appearance:none;border:none;background:none;color:var(--muted);font-size:15px;font-weight:650;padding:14px 20px;cursor:pointer;transition:color .15s;border-bottom:2.5px solid transparent;margin-bottom:-1px;letter-spacing:.2px}
+.vt:hover{color:var(--text)}
+.vt.active{color:var(--text);border-bottom-color:var(--accent)}
 .member-chips .mname{cursor:pointer}
 .member-chips .mname:hover{color:var(--accent);text-decoration:underline}
 .member-block.flash{animation:flashHL 1.5s ease-out}
@@ -599,7 +604,7 @@ label.check input{width:auto}
   <div class="cg-box">
     <div class="cg-logo">📋</div>
     <h2>Weekly Report Hub</h2>
-    <div class="cg-ver">build 260609q</div>
+    <div class="cg-ver">build 260609r</div>
     <div id="cgPassWrap">
       <p class="cg-sub">Enter your team passcode to sign in</p>
       <input type="password" id="cgPass" placeholder="Team passcode" autocomplete="current-password">
@@ -635,108 +640,112 @@ label.check input{width:auto}
   </div>
   <div class="session-info">
     <span class="cloud-info" id="cloudWho"></span>
-    <span class="build-badge" title="Currently loaded app build">b260609q</span>
+    <span class="build-badge" title="Currently loaded app build">b260609r</span>
     <button class="btn sm cloud-info" id="cloudLogout" hidden>Sign out</button>
   </div>
 </header>
 
-<div class="layout">
-  <!-- ============ LEFT SIDEBAR ============ -->
-  <aside class="sidebar">
-    <section class="panel">
-      <h2>Members <span class="pill" id="memberCount">0</span></h2>
-      <div class="group-bar">
-        <span class="gb-label">Group</span>
-        <select id="groupSelect" title="Switch group (each remembers member order &amp; role)"></select>
-        <button class="btn xs" id="saveGroupBtn" title="Save current order to this group">💾</button>
-        <button class="btn xs" id="newGroupBtn" title="New group">＋</button>
-        <button class="btn xs" id="renameGroupBtn" title="Rename group">✎</button>
-        <button class="btn xs danger" id="delGroupBtn" title="Delete group">🗑</button>
+<nav class="view-tabs admin-only" id="viewTabs">
+  <button class="vt active" data-view="dashboard">📊 Dashboard</button>
+  <button class="vt" data-view="projects">🗂 Projects</button>
+  <button class="vt" data-view="tasks">✅ Tasks</button>
+  <button class="vt" data-view="team">👥 Team</button>
+</nav>
+
+<main class="main">
+  <!-- ============ DASHBOARD ============ -->
+  <section class="stats admin-only" id="statsRow" data-pane="dashboard"></section>
+
+  <section class="charts one admin-only" data-pane="dashboard team">
+    <div class="panel chart-block">
+      <h3>🧑‍💻 Member workload <span class="ch-sub" id="wlChartSub"></span></h3>
+      <div id="workloadChart" class="chart-list"></div>
+    </div>
+  </section>
+
+  <section class="panel admin-only" data-pane="dashboard">
+    <h2>Report batches</h2>
+    <p class="hint">Cumulative: new reports don't overwrite old tasks — items are tagged New / Updated / Unchanged.</p>
+    <ul class="batch-list" id="batchList"></ul>
+    <button class="btn sm danger" id="resetTasksBtn">Clear all tasks</button>
+  </section>
+
+  <!-- ============ PROJECTS ============ -->
+  <section class="panel catalog-panel admin-only" data-pane="projects">
+    <div class="catalog-head">
+      <div><p class="eyebrow">PORTFOLIO</p><h2 id="catalogTitle">Project catalog &amp; task coverage</h2></div>
+      <div class="cat-tools">
+        <button class="btn sm" id="addProjBtn" title="Add a project manually">＋ Add project</button>
+        <button class="btn sm" id="importProjListBtn" title="Paste the official project list to batch-create">📋 Paste project list</button>
+        <select id="catalogMember"></select>
       </div>
-      <p class="hint">Each group remembers member <b>order &amp; role</b>; switching applies that roster.<br>Paste or upload a member list, one per line; aliases &amp; roles allowed:<br><code>Raveendra: Ravi, Rav</code> &nbsp;<code>Aaron [RF]</code></p>
-      <textarea id="memberPaste" rows="5" placeholder="David&#10;Mei&#10;Raveendra: Ravi&#10;Eric&#10;Isha"></textarea>
-      <div class="row">
-        <button class="btn sm primary" id="addMembersBtn">Add</button>
-        <label class="btn sm">Upload list<input type="file" id="memberFileInput" accept=".txt,.csv" hidden></label>
-        <button class="btn sm danger" id="clearMembersBtn">Clear list</button>
-      </div>
-      <div class="row">
-        <button class="btn sm" id="loadFromReportBtn">＋ Add members from reports</button>
-      </div>
-      <label class="check"><input type="checkbox" id="autoAddChk"> Auto-add report owners to the member list on import</label>
-      <label class="check"><input type="checkbox" id="fuzzyChk"> Fuzzy match: nicknames / partial matches count as the same person (e.g. Ravi→Raveendra)</label>
-      <ul class="member-chips" id="memberChips"></ul>
-    </section>
+    </div>
+    <div id="projectCatalog"></div>
+  </section>
 
-    <section class="panel">
-      <h2>Report batches</h2>
-      <p class="hint">Cumulative: new reports don't overwrite old tasks — items are tagged New / Updated / Unchanged.</p>
-      <ul class="batch-list" id="batchList"></ul>
-      <button class="btn sm danger" id="resetTasksBtn">Clear all tasks</button>
-    </section>
+  <section class="panel admin-only" data-pane="projects">
+    <h2>Project merge (optional)</h2>
+    <p class="hint">Group different spellings into one project. One group per line, format:<br><code>Label: name1, name2</code><br>e.g. <code>ID506: SDX85, Qualcomm, B01W046</code></p>
+    <textarea id="aliasText" rows="3" placeholder="ID506: SDX85, Qualcomm, B01W046"></textarea>
+    <button class="btn sm primary" id="applyAliasBtn" style="margin-top:8px">Apply merge</button>
+  </section>
 
-    <section class="panel">
-      <h2>Project merge (optional)</h2>
-      <p class="hint">Group different spellings into one project. One group per line, format:<br><code>Label: name1, name2</code><br>e.g. <code>ID506: SDX85, Qualcomm, B01W046</code></p>
-      <textarea id="aliasText" rows="3" placeholder="ID506: SDX85, Qualcomm, B01W046"></textarea>
-      <button class="btn sm primary" id="applyAliasBtn" style="margin-top:8px">Apply merge</button>
-    </section>
-  </aside>
+  <!-- ============ TASKS ============ -->
+  <section class="filterbar admin-only" data-pane="tasks">
+    <input id="filterQ" placeholder="🔍 Search projects / work">
+    <select id="filterProject"></select>
+    <select id="filterMember"></select>
+    <select id="filterRole">
+      <option value="">All roles</option>
+      <option value="Leader">Leader</option>
+      <option value="EE">EE</option>
+      <option value="RF">RF</option>
+      <option value="ANT">ANT</option>
+      <option value="SW">SW</option>
+      <option value="PM">PM</option>
+      <option value="QA">QA</option>
+    </select>
+    <select id="filterStatus">
+      <option value="">All statuses</option>
+      <option value="active">In progress</option>
+      <option value="closed">Closed</option>
+      <option value="highrisk">High risk</option>
+      <option value="New">New</option>
+      <option value="Updated">Updated</option>
+    </select>
+    <label class="check"><input type="checkbox" id="hideEmptyChk"> Only members with tasks</label>
+    <button class="btn sm" id="clearFiltersBtn">Clear filters</button>
+    <span id="filterCount" class="hint"></span>
+  </section>
 
-  <!-- ============ MAIN ============ -->
-  <main class="main">
-    <section class="stats admin-only" id="statsRow"></section>
-    <p class="nav-hint admin-only">↑ Click a card above to switch view (Projects / Members / Closed / High risk / Design Docs)</p>
+  <section class="members-area" id="membersArea" data-pane="tasks"></section>
 
-    <section class="panel catalog-panel admin-only">
-      <div class="catalog-head">
-        <div><p class="eyebrow">PORTFOLIO</p><h2 id="catalogTitle">Project catalog &amp; task coverage</h2></div>
-        <div class="cat-tools">
-          <button class="btn sm" id="addProjBtn" title="Add a project manually">＋ Add project</button>
-          <button class="btn sm" id="importProjListBtn" title="Paste the official project list to batch-create">📋 Paste project list</button>
-          <select id="catalogMember"></select>
-        </div>
-      </div>
-      <div id="projectCatalog"></div>
-    </section>
-
-    <section class="charts one admin-only">
-      <div class="panel chart-block">
-        <h3>🧑‍💻 Member workload <span class="ch-sub" id="wlChartSub"></span></h3>
-        <div id="workloadChart" class="chart-list"></div>
-      </div>
-    </section>
-
-    <section class="filterbar admin-only">
-      <input id="filterQ" placeholder="🔍 Search projects / work">
-      <select id="filterProject"></select>
-      <select id="filterMember"></select>
-      <select id="filterRole">
-        <option value="">All roles</option>
-        <option value="Leader">Leader</option>
-        <option value="EE">EE</option>
-        <option value="RF">RF</option>
-        <option value="ANT">ANT</option>
-        <option value="SW">SW</option>
-        <option value="PM">PM</option>
-        <option value="QA">QA</option>
-      </select>
-      <select id="filterStatus">
-        <option value="">All statuses</option>
-        <option value="active">In progress</option>
-        <option value="closed">Closed</option>
-        <option value="highrisk">High risk</option>
-        <option value="New">New</option>
-        <option value="Updated">Updated</option>
-      </select>
-      <label class="check"><input type="checkbox" id="hideEmptyChk"> Only members with tasks</label>
-      <button class="btn sm" id="clearFiltersBtn">Clear filters</button>
-      <span id="filterCount" class="hint"></span>
-    </section>
-
-    <section class="members-area" id="membersArea"></section>
-  </main>
-</div>
+  <!-- ============ TEAM ============ -->
+  <section class="panel" data-pane="team">
+    <h2>Members <span class="pill" id="memberCount">0</span></h2>
+    <div class="group-bar">
+      <span class="gb-label">Group</span>
+      <select id="groupSelect" title="Switch group (each remembers member order &amp; role)"></select>
+      <button class="btn xs" id="saveGroupBtn" title="Save current order to this group">💾</button>
+      <button class="btn xs" id="newGroupBtn" title="New group">＋</button>
+      <button class="btn xs" id="renameGroupBtn" title="Rename group">✎</button>
+      <button class="btn xs danger" id="delGroupBtn" title="Delete group">🗑</button>
+    </div>
+    <p class="hint">Each group remembers member <b>order &amp; role</b>; switching applies that roster.<br>Paste or upload a member list, one per line; aliases &amp; roles allowed:<br><code>Raveendra: Ravi, Rav</code> &nbsp;<code>Aaron [RF]</code></p>
+    <textarea id="memberPaste" rows="5" placeholder="David&#10;Mei&#10;Raveendra: Ravi&#10;Eric&#10;Isha"></textarea>
+    <div class="row">
+      <button class="btn sm primary" id="addMembersBtn">Add</button>
+      <label class="btn sm">Upload list<input type="file" id="memberFileInput" accept=".txt,.csv" hidden></label>
+      <button class="btn sm danger" id="clearMembersBtn">Clear list</button>
+    </div>
+    <div class="row">
+      <button class="btn sm" id="loadFromReportBtn">＋ Add members from reports</button>
+    </div>
+    <label class="check"><input type="checkbox" id="autoAddChk"> Auto-add report owners to the member list on import</label>
+    <label class="check"><input type="checkbox" id="fuzzyChk"> Fuzzy match: nicknames / partial matches count as the same person (e.g. Ravi→Raveendra)</label>
+    <ul class="member-chips" id="memberChips"></ul>
+  </section>
+</main>
 
 <!-- ============ WORKBENCH MODAL ============ -->
 <div class="modal-overlay" id="workbenchModal" hidden>
@@ -1927,12 +1936,12 @@ function renderStats(){
   // each stat card doubles as navigation: [icon, value, label, colorClass, view, statusFilter].
   // special view '__docs__' -> opens the global Design Documents library (replaces the old 完成率 box).
   const cards=[
-    ['📁', projCount, 'Projects', '', 'catalog', ''],
-    ['👥', members.length, 'Members', '', 'members', ''],
-    ['📋', total, 'Tasks', '', 'members', ''],
-    ['✅', closed+'/'+total, 'Closed', 'ok', 'members', 'closed'],
+    ['📁', projCount, 'Projects', '', 'projects', ''],
+    ['👥', members.length, 'Members', '', 'team', ''],
+    ['📋', total, 'Tasks', '', 'tasks', ''],
+    ['✅', closed+'/'+total, 'Closed', 'ok', 'tasks', 'closed'],
     ['📐', docCount, 'Design Docs', 'accent', '__docs__', ''],
-    ['⚠️', high, 'High risk', 'warn', 'members', 'highrisk'],
+    ['⚠️', high, 'High risk', 'warn', 'tasks', 'highrisk'],
   ];
   $('#statsRow').innerHTML=cards.map(([ic,n,l,c,view,flt])=>{
     if(view==='__docs__') return `<div class="stat nav ${c}" data-designdocs="1"><div class="st-ic">${ic}</div><div><div class="num">${n}</div><div class="lbl">${l}</div></div></div>`;
@@ -3617,6 +3626,7 @@ function wireEvents(){
     const t=e.target;
     if(t.closest('[data-close]')){ t.closest('.modal-overlay').hidden=true; return; }
     if(t.closest('[data-designdocs]')){ openDesignDocs(); return; }
+    { const vt=t.closest('#viewTabs .vt'); if(vt){ setView(vt.dataset.view); renderStats(); return; } }
     const navCard=t.closest('[data-nav]'); if(navCard){ navStat(navCard.dataset.nav, navCard.dataset.flt); return; }
     if(t.closest('.mname') && t.closest('.mchip')){ jumpToMember(t.closest('.mchip').dataset.mid); return; }
     if(t.dataset.delMember){ deleteMember(t.dataset.delMember); return; }
@@ -3683,15 +3693,16 @@ function wireEvents(){
 function openLight(src){ $('#lightboxImg').src=src; $('#lightbox').hidden=false; }
 
 /* ---------- view tabs (less scrolling) ---------- */
-let currentView=store.load('wrt_view','catalog');
+let currentView=store.load('wrt_view','dashboard');
 function setView(v){
+  const MIGRATE={catalog:'dashboard', members:'dashboard', workload:'dashboard'};   // old IA view names -> land on the new Dashboard
+  v=MIGRATE[v]||v;
+  if(!['dashboard','projects','tasks','team'].includes(v)) v='dashboard';
   currentView=v; store.save('wrt_view',v);
-  const show=(sel,on)=>{ const e=document.querySelector(sel); if(e) e.style.display=on?'':'none'; };
-  show('.catalog-panel', v==='catalog');
-  show('.charts', v==='workload');
-  show('.filterbar', v==='members');
-  show('.members-area', v==='members');
-  $$('#viewTabs button').forEach(b=>b.classList.toggle('active', b.dataset.view===v));
+  document.querySelectorAll('[data-pane]').forEach(el=>{
+    el.style.display = el.getAttribute('data-pane').split(/\s+/).includes(v) ? '' : 'none';
+  });
+  $$('#viewTabs .vt').forEach(b=>b.classList.toggle('active', b.dataset.view===v));
 }
 
 /* ---------- drag a project card onto another to merge / correct grouping ---------- */
