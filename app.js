@@ -1016,30 +1016,12 @@ function renderBatches(){
     <span><b style="color:var(--new)">${b.nnew}N</b> <b style="color:var(--updated)">${b.nupd}U</b> ${b.nunc}=</span></li>`).join('')
     : '<li>No imports yet</li>';
 }
-function renderStats(){
+function renderStats(){            // KPI counts now live in the top tabs (no separate stat-card row)
   const vt=visibleTasks();
-  const total=vt.length;
-  const closed=vt.filter(isClosed).length;
-  const active=total-closed;
-  const projCount=new Set(vt.map(t=>resolveProjk(t.projk||t.key))).size;  // merged projects count as one
-  const high=vt.filter(t=>t.risk==='High'&&!isClosed(t)).length;
-  const docCount=Object.keys(projMeta).reduce((s,k)=>s+((projMeta[k]||{}).images||[]).length,0);   // all design documents
-  // each stat card doubles as navigation: [icon, value, label, colorClass, view, statusFilter].
-  // special view '__docs__' -> opens the global Design Documents library (replaces the old 完成率 box).
-  const cards=[
-    ['📁', projCount, 'Projects', '', 'projects', ''],
-    ['👥', members.length, 'Members', '', 'team', ''],
-    ['📋', total, 'Tasks', '', 'tasks', ''],
-    ['✅', closed+'/'+total, 'Closed', 'ok', 'tasks', 'closed'],
-    ['📐', docCount, 'Design Docs', 'accent', '__docs__', ''],
-    ['⚠️', high, 'High risk', 'warn', 'tasks', 'highrisk'],
-  ];
-  $('#statsRow').innerHTML=cards.map(([ic,n,l,c,view,flt])=>{
-    if(view==='__docs__') return `<div class="stat nav ${c}" data-designdocs="1"><div class="st-ic">${ic}</div><div><div class="num">${n}</div><div class="lbl">${l}</div></div></div>`;
-    const active = view===currentView && (flt||'')===(filters.status||'');
-    return `<div class="stat nav ${c} ${active?'active':''}" data-nav="${view}" data-flt="${flt}">
-      <div class="st-ic">${ic}</div><div><div class="num">${n}</div><div class="lbl">${l}</div></div></div>`;
-  }).join('');
+  const master=projectGroups().filter(g=>(projMeta[g.projk]||{}).master).length;
+  const projCount=master || new Set(vt.map(t=>resolveProjk(t.projk||t.key))).size;
+  const setN=(id,n)=>{ const e=$('#'+id); if(e) e.textContent=n; };
+  setN('tnProjects', projCount); setN('tnTasks', vt.length); setN('tnTeam', members.length);
 }
 function navStat(view, flt){ filters.status=flt||''; setView(view); renderFilters(); renderMembersArea(); renderStats(); }
 
@@ -1773,11 +1755,11 @@ function renderCharts(){
   const maxW=Math.max(1,...wl.map(x=>x.c));
   $('#wlChartSub').textContent = `${active}/${members.length} with tasks · click a name to see theirs`;
   $('#workloadChart').innerHTML = wl.length
-    ? wl.map(x=>progBar(x.name+(x.c===0?' (pending)':''), Math.round(x.c/maxW*100), x.c, 'wl', {mem:x.id})).join('')
+    ? wl.map(x=>chartBar(x.name+(x.c===0?' (pending)':''), Math.round(x.c/maxW*100), x.c, 'wl', {mem:x.id})).join('')
     : '<p class="hint">No data</p>';
 }
 // one chart row. cls 'wl' = workload (purple); else colored by progress. opts.proj/opts.mem make it clickable.
-function progBar(label, pct, valText, cls, opts){
+function chartBar(label, pct, valText, cls, opts){
   opts=opts||{};
   const fill = cls==='wl' ? 'wl' : progClass(pct);
   const done = cls!=='wl' && pct>=100;

@@ -74,6 +74,7 @@ code{background:#0c1118;padding:1px 5px;border-radius:5px;color:var(--accent2);f
 .vt{appearance:none;border:none;background:none;color:var(--muted);font-size:15px;font-weight:650;padding:14px 20px;cursor:pointer;transition:color .15s;border-bottom:2.5px solid transparent;margin-bottom:-1px;letter-spacing:.2px}
 .vt:hover{color:var(--text)}
 .vt.active{color:var(--text);border-bottom-color:var(--accent)}
+.vt-n{font-size:12px;font-weight:700;color:var(--accent);background:rgba(90,162,255,.13);border-radius:20px;padding:1px 8px;margin-left:3px;vertical-align:middle}
 .member-chips .mname{cursor:pointer}
 .member-chips .mname:hover{color:var(--accent);text-decoration:underline}
 .member-block.flash{animation:flashHL 1.5s ease-out}
@@ -634,7 +635,7 @@ label.check input{width:auto}
   <div class="cg-box">
     <div class="cg-logo">📋</div>
     <h2>Weekly Report Hub</h2>
-    <div class="cg-ver">build 260609s</div>
+    <div class="cg-ver">build 260609t</div>
     <div id="cgPassWrap">
       <p class="cg-sub">Enter your team passcode to sign in</p>
       <input type="password" id="cgPass" placeholder="Team passcode" autocomplete="current-password">
@@ -670,22 +671,20 @@ label.check input{width:auto}
   </div>
   <div class="session-info">
     <span class="cloud-info" id="cloudWho"></span>
-    <span class="build-badge" title="Currently loaded app build">b260609s</span>
+    <span class="build-badge" title="Currently loaded app build">b260609t</span>
     <button class="btn sm cloud-info" id="cloudLogout" hidden>Sign out</button>
   </div>
 </header>
 
 <nav class="view-tabs admin-only" id="viewTabs">
   <button class="vt active" data-view="dashboard">📊 Dashboard</button>
-  <button class="vt" data-view="projects">🗂 Projects</button>
-  <button class="vt" data-view="tasks">✅ Tasks</button>
-  <button class="vt" data-view="team">👥 Team</button>
+  <button class="vt" data-view="projects">🗂 Projects <span class="vt-n" id="tnProjects"></span></button>
+  <button class="vt" data-view="tasks">✅ Tasks <span class="vt-n" id="tnTasks"></span></button>
+  <button class="vt" data-view="team">👥 Team <span class="vt-n" id="tnTeam"></span></button>
 </nav>
 
 <main class="main">
   <!-- ============ DASHBOARD ============ -->
-  <section class="stats admin-only" id="statsRow" data-pane="dashboard"></section>
-
   <section class="panel admin-only" data-pane="dashboard">
     <h2>🔆 This week highlights</h2>
     <div id="dashHighlights" class="hl-grid"></div>
@@ -712,6 +711,7 @@ label.check input{width:auto}
       <div class="cat-tools">
         <button class="btn sm" id="addProjBtn" title="Add a project manually">＋ Add project</button>
         <button class="btn sm" id="importProjListBtn" title="Paste the official project list to batch-create">📋 Paste project list</button>
+        <button class="btn sm" data-designdocs="1" title="Design documents library">📐 Design Docs</button>
         <select id="catalogMember"></select>
       </div>
     </div>
@@ -1980,30 +1980,12 @@ function renderBatches(){
     <span><b style="color:var(--new)">${b.nnew}N</b> <b style="color:var(--updated)">${b.nupd}U</b> ${b.nunc}=</span></li>`).join('')
     : '<li>No imports yet</li>';
 }
-function renderStats(){
+function renderStats(){            // KPI counts now live in the top tabs (no separate stat-card row)
   const vt=visibleTasks();
-  const total=vt.length;
-  const closed=vt.filter(isClosed).length;
-  const active=total-closed;
-  const projCount=new Set(vt.map(t=>resolveProjk(t.projk||t.key))).size;  // merged projects count as one
-  const high=vt.filter(t=>t.risk==='High'&&!isClosed(t)).length;
-  const docCount=Object.keys(projMeta).reduce((s,k)=>s+((projMeta[k]||{}).images||[]).length,0);   // all design documents
-  // each stat card doubles as navigation: [icon, value, label, colorClass, view, statusFilter].
-  // special view '__docs__' -> opens the global Design Documents library (replaces the old 完成率 box).
-  const cards=[
-    ['📁', projCount, 'Projects', '', 'projects', ''],
-    ['👥', members.length, 'Members', '', 'team', ''],
-    ['📋', total, 'Tasks', '', 'tasks', ''],
-    ['✅', closed+'/'+total, 'Closed', 'ok', 'tasks', 'closed'],
-    ['📐', docCount, 'Design Docs', 'accent', '__docs__', ''],
-    ['⚠️', high, 'High risk', 'warn', 'tasks', 'highrisk'],
-  ];
-  $('#statsRow').innerHTML=cards.map(([ic,n,l,c,view,flt])=>{
-    if(view==='__docs__') return `<div class="stat nav ${c}" data-designdocs="1"><div class="st-ic">${ic}</div><div><div class="num">${n}</div><div class="lbl">${l}</div></div></div>`;
-    const active = view===currentView && (flt||'')===(filters.status||'');
-    return `<div class="stat nav ${c} ${active?'active':''}" data-nav="${view}" data-flt="${flt}">
-      <div class="st-ic">${ic}</div><div><div class="num">${n}</div><div class="lbl">${l}</div></div></div>`;
-  }).join('');
+  const master=projectGroups().filter(g=>(projMeta[g.projk]||{}).master).length;
+  const projCount=master || new Set(vt.map(t=>resolveProjk(t.projk||t.key))).size;
+  const setN=(id,n)=>{ const e=$('#'+id); if(e) e.textContent=n; };
+  setN('tnProjects', projCount); setN('tnTasks', vt.length); setN('tnTeam', members.length);
 }
 function navStat(view, flt){ filters.status=flt||''; setView(view); renderFilters(); renderMembersArea(); renderStats(); }
 
@@ -2737,11 +2719,11 @@ function renderCharts(){
   const maxW=Math.max(1,...wl.map(x=>x.c));
   $('#wlChartSub').textContent = `${active}/${members.length} with tasks · click a name to see theirs`;
   $('#workloadChart').innerHTML = wl.length
-    ? wl.map(x=>progBar(x.name+(x.c===0?' (pending)':''), Math.round(x.c/maxW*100), x.c, 'wl', {mem:x.id})).join('')
+    ? wl.map(x=>chartBar(x.name+(x.c===0?' (pending)':''), Math.round(x.c/maxW*100), x.c, 'wl', {mem:x.id})).join('')
     : '<p class="hint">No data</p>';
 }
 // one chart row. cls 'wl' = workload (purple); else colored by progress. opts.proj/opts.mem make it clickable.
-function progBar(label, pct, valText, cls, opts){
+function chartBar(label, pct, valText, cls, opts){
   opts=opts||{};
   const fill = cls==='wl' ? 'wl' : progClass(pct);
   const done = cls!=='wl' && pct>=100;
