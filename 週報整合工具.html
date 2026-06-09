@@ -542,7 +542,7 @@ label.check input{width:auto}
   <div class="cg-box">
     <div class="cg-logo">📋</div>
     <h2>Weekly Report Hub</h2>
-    <div class="cg-ver">build 260609j</div>
+    <div class="cg-ver">build 260609k</div>
     <div id="cgPassWrap">
       <p class="cg-sub">Enter your team passcode to sign in</p>
       <input type="password" id="cgPass" placeholder="Team passcode" autocomplete="current-password">
@@ -578,7 +578,7 @@ label.check input{width:auto}
   </div>
   <div class="session-info">
     <span class="cloud-info" id="cloudWho"></span>
-    <span class="build-badge" title="Currently loaded app build">b260609j</span>
+    <span class="build-badge" title="Currently loaded app build">b260609k</span>
     <button class="btn sm cloud-info" id="cloudLogout" hidden>Sign out</button>
   </div>
 </header>
@@ -2781,7 +2781,7 @@ function progColor(p){ return p>=100?PPT.green : p>=70?PPT.blue : p>=34?PPT.cyan
 function collectImages(list){
   const out=[], seen=new Set();
   (list||[]).forEach(t=>(t.images||[]).forEach(im=>{
-    const k=im&&(im.id||im.data); if(im&&im.data&&!seen.has(k)){ seen.add(k); out.push(im); }
+    const k=im&&(im.id||im.data); if(im&&im.data&&!seen.has(k)){ seen.add(k); out.push(Object.assign({_lbl:pptPlabel(t)}, im)); }
   }));
   return out;
 }
@@ -2890,20 +2890,60 @@ function assemblePptx(memberIds){
       .reduce((a,l)=>a+Math.max(1,Math.ceil(Math.min(l.length,200)/CPCELL)),0);
     return c*0.19 + 0.12;   // calibrated to the tighter cell margins below
   }
-  // one image card (white card, cyan top, contained image, caption)
+  // one image card (white card, cyan top bar, contained image, scaled caption) — works at any cell size
   function imgCard(s,x,y,w,h,im,n){
+    const topBar=0.06, pad=Math.min(0.15, w*0.05), capH=Math.min(0.30, Math.max(0.20, h*0.12));
     s.addShape(RR,{x,y,w,h,rectRadius:0.05,fill:{color:PPT.white},line:{color:PPT.line,width:1}});
-    s.addShape(R,{x,y,w,h:0.06,fill:{color:PPT.cyan}});
-    try{ s.addImage({data:im.data,x:x+0.15,y:y+0.2,w:w-0.3,h:h-0.55,sizing:{type:'contain',w:w-0.3,h:h-0.55}}); }catch(e){}
-    s.addText('Fig '+n,{x:x+0.15,y:y+h-0.32,w:w-0.3,h:0.26,fontSize:10,color:PPT.gray,fontFace:PPT.font});
+    s.addShape(R,{x,y,w,h:topBar,fill:{color:PPT.cyan}});
+    const iw=w-2*pad, ih=h-topBar-pad-capH;
+    try{ s.addImage({data:im.data,x:x+pad,y:y+topBar+pad*0.5,w:iw,h:ih,sizing:{type:'contain',w:iw,h:ih}}); }catch(e){}
+    const fs=Math.max(8, Math.min(11, Math.round(h*3.6)));
+    const cap='Fig '+n+(im._lbl? '  ·  '+String(im._lbl).slice(0,24) : '');
+    s.addText(cap,{x:x+pad,y:y+h-capH,w:iw,h:capH-0.02,fontSize:fs,color:PPT.gray,fontFace:PPT.font,valign:'middle'});
   }
-  // member's images → ONE big image per slide
+  // a member's images → ADAPTIVE grid per slide, sized by image count + aspect ratio.
+  // chooseGrid maximises how big the images render while keeping every cell above a legible
+  // minimum (MINW/MINH); when more images won't fit at that minimum they spill onto extra slides.
+  function avgAspect(chunk){
+    let a=0,n=0; chunk.forEach(im=>{ const r=(im.w&&im.h)?im.w/im.h:1.4; if(r>0&&isFinite(r)){a+=r;n++;} });
+    return n? a/n : 1.4;
+  }
+  function chooseGrid(k, ar, W, H, GAP, CAPH, MINW, MINH){
+    let best=null;
+    for(let cols=1; cols<=k; cols++){
+      const rows=Math.ceil(k/cols), cw=(W-(cols-1)*GAP)/cols, ch=(H-(rows-1)*GAP)/rows;
+      if(cw<MINW || ch<MINH) continue;                 // cell too small to read -> reject (forces a spill)
+      const aw=cw-0.30, ah=ch-0.30-CAPH;               // space left for the image after padding + caption
+      let dw=aw, dh=aw/ar; if(dh>ah){ dh=ah; dw=ah*ar; }   // contain the aspect ratio in the cell
+      const area=Math.max(0,dw)*Math.max(0,dh);
+      if(!best || area>best.area) best={cols,rows,area};
+    }
+    return best;
+  }
   function attachPages(name, role, imgs){
-    imgs.forEach((im,i)=>{
-      const s=pptx.addSlide(); header(s,name,role,'Attachments');
+    if(!imgs||!imgs.length) return;
+    const X0=0.7, Y0=1.98, W=11.93, H=4.95, GAP=0.18, CAPH=0.30;
+    const MINW=2.5, MINH=1.45, MAXPP=6;                 // <=6 imgs/slide keeps measurements readable
+    let i=0, page=0;
+    while(i<imgs.length){
+      let take=Math.min(MAXPP, imgs.length-i), grid=null;
+      while(take>=1){                                   // shrink the chunk until a legible grid fits
+        grid=chooseGrid(take, avgAspect(imgs.slice(i,i+take)), W,H,GAP,CAPH,MINW,MINH);
+        if(grid) break; take--;
+      }
+      if(!grid){ take=1; grid={cols:1,rows:1}; }
+      const chunk=imgs.slice(i,i+take);
+      const cw=(W-(grid.cols-1)*GAP)/grid.cols, ch=(H-(grid.rows-1)*GAP)/grid.rows;
+      const s=pptx.addSlide(); header(s,name,role, page?'Attachments (cont.)':'Attachments');
       sectionLabel(s,'ATTACHMENTS  ｜  Issue images / measurements',1.55);
-      imgCard(s,0.9,1.98,11.53,4.9,im,i+1);
-    });
+      chunk.forEach((im,kk)=>{
+        const r=Math.floor(kk/grid.cols), c=kk%grid.cols;
+        const inRow=(r===grid.rows-1)?(chunk.length-(grid.rows-1)*grid.cols):grid.cols;
+        const rowW=inRow*cw+(inRow-1)*GAP, xs=X0+(W-rowW)/2;     // center a partial last row
+        imgCard(s, xs+c*(cw+GAP), Y0+r*(ch+GAP), cw, ch, im, i+kk+1);
+      });
+      i+=take; page++;
+    }
   }
   // build ONE table (header + the given rows) at vertical position `top`
   function buildTable(s, top, key, chunk){
