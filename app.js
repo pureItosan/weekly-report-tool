@@ -42,6 +42,7 @@ let projCats = store.load('wrt_projcats', []);     // user-added project categor
 let catOpen  = store.load('wrt_catopen', null);    // {cat:true/false} remembered expand/collapse of category groups
 let catFilter = '';                                // '' = show all categories; else only show this category (tab filter)
 let catalogView = store.load('wrt_catview', 'matrix');   // projects panel view: 'matrix' | 'tree' | 'cards'
+let treeExpand = {};                               // tree: which Customer Project's task branch is expanded (cp -> true)
 let autoAdd = store.load('wrt_autoadd', true);        // auto-create members from report owners
 let fuzzy   = store.load('wrt_fuzzy', true);          // allow nickname/typo/partial matching (default on)
 /* member GROUPS — named rosters that remember member order + roles + aliases.
@@ -1553,8 +1554,20 @@ function renderMatrixHTML(groups){
   return html+'</div>';
 }
 function renderTreeHTML(groups){
-  groups=masterOnly(groups);
-  const types=projTree(groups);
+  const types=projTree(masterOnly(groups));
+  // weekly-report tasks are tagged by Customer Project (e.g. "B01W043 / ID535"), so link tasks to the
+  // project node by derived Customer Project; tasks with no project go under a "Cross-project" node.
+  const tasksByCp={}, noCp=[];
+  groups.forEach(g=>{ if(!(g.tasks||[]).length) return; const cp=projCustProj(g);
+    if(cp)(tasksByCp[cp]=tasksByCp[cp]||[]).push(...g.tasks); else noCp.push(...g.tasks); });
+  const usedCp={}, CAP=6;
+  const taskChip=t=>{ const txt=(t.current||t.next||'(no description)').replace(/\s+/g,' ').trim().slice(0,48);
+    return `<button class="ptree-task st-${esc(t.status||'')}" data-opentask="${esc(t.id)}" title="Open task"><span class="ptt-dot"></span><span class="ptt-txt">${esc(txt)}</span></button>`; };
+  const taskBranch=(cp,ts)=>{ if(!ts||!ts.length) return '';
+    const exp=treeExpand[cp], list=exp?ts:ts.slice(0,CAP);
+    const chips=list.map(taskChip).join('');
+    const toggle=ts.length>CAP?`<button class="ptree-more" data-treeexp="${esc(cp)}">${exp?'▾ Show less':'▸ +'+(ts.length-CAP)+' more'}</button>`:'';
+    return `<div class="ptree-tasks"><div class="ptt-head">📋 ${ts.length} task${ts.length>1?'s':''}</div>${chips}${toggle}</div>`; };
   let html='<div class="ptree-wrap">';
   projTypeOrder(types).forEach(ty=>{
     const block=types[ty];
@@ -1567,16 +1580,21 @@ function renderTreeHTML(groups){
           <span class="ptl-comp">${esc(projComponent(g)||'Model')}</span>
           <span class="ptl-code">${esc(m.code||g.label)}</span>
           ${m.chipset?`<span class="ptl-chip">${esc(m.chipset)}</span>`:''}
-          ${g.tasks.length?`<span class="ptl-tasks">${g.tasks.length} task${g.tasks.length>1?'s':''}</span>`:''}
         </button>`;
       }).join('');
+      const cp=grp.cp; let branch=''; if(cp && !usedCp[cp]){ usedCp[cp]=1; branch=taskBranch(cp, tasksByCp[cp]); }
       html+=`<div class="ptree-row">
         <div class="ptree-node ptn-cp">${esc(grp.cp||grp.label)}${(grp.cust&&grp.cp)?`<span class="ptn-sub">${esc(grp.cust)}</span>`:''}</div>
         <div class="ptree-conn"></div>
-        <div class="ptree-leaves">${leaves}</div>
+        <div class="ptree-leaves">${leaves}${branch}</div>
       </div>`;
     });
   });
+  if(noCp.length){
+    html+=`<div class="ptree-type">Cross-project / unassigned</div>
+      <div class="ptree-row"><div class="ptree-node ptn-cp">Other<span class="ptn-sub">no project</span></div>
+        <div class="ptree-conn"></div><div class="ptree-leaves">${taskBranch('__other__', noCp)}</div></div>`;
+  }
   return html+'</div>';
 }
 function optTags(arr,val){ return arr.map(x=>`<option ${x===val?'selected':''}>${x}</option>`).join(''); }
@@ -2709,6 +2727,7 @@ function wireEvents(){
     if(t.dataset.exportMember!==undefined){ if(t.dataset.exportMember) exportWord([t.dataset.exportMember]); else toast('This task has no matching member'); return; }
     // ----- catalog editing -----
     { const cv=t.closest('[data-catview]'); if(cv){ catalogView=cv.dataset.catview; store.save('wrt_catview',catalogView); renderCatalog(); return; } }
+    { const te=t.closest('[data-treeexp]'); if(te){ const c=te.dataset.treeexp; treeExpand[c]=!treeExpand[c]; renderCatalog(); return; } }
     if(t.dataset.editProj!==undefined){ if(catalogView!=='cards'){ catalogView='cards'; store.save('wrt_catview',catalogView); }  // editing lives in Cards view
       editingProj = editingProj===t.dataset.editProj ? '' : t.dataset.editProj; renderCatalog(); return; }
     if(t.dataset.saveProj!==undefined){ saveProjMeta(t.dataset.saveProj, t.closest('.proj-card')); return; }
