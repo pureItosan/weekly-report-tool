@@ -2078,7 +2078,7 @@ function assemblePptx(memberIds){
   function attachPages(name, role, imgs){
     if(!imgs||!imgs.length) return;
     const X0=0.7, Y0=1.98, W=11.93, H=4.95, GAP=0.18, CAPH=0.30;
-    const MINW=2.5, MINH=1.45, MAXPP=6;                 // <=6 imgs/slide keeps measurements readable
+    const MINW=2.5, MINH=1.45, MAXPP=2;                 // at most 2 imgs/slide; ratio is NEVER distorted (contain) — if 2 won't fit at true ratio, drop to 1 + new page
     let i=0, page=0;
     while(i<imgs.length){
       let take=Math.min(MAXPP, imgs.length-i), grid=null;
