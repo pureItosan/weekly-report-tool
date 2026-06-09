@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Weekly Report Hub</title>
-<link rel="stylesheet" href="styles.css?v=260609v">
+<link rel="stylesheet" href="styles.css?v=260609w">
 </head>
 <body>
 <!-- ===== CLOUD LOGIN GATE (online only) ===== -->
@@ -15,7 +15,7 @@
   <div class="cg-box">
     <div class="cg-logo">📋</div>
     <h2>Weekly Report Hub</h2>
-    <div class="cg-ver">build 260609v</div>
+    <div class="cg-ver">build 260609w</div>
     <div id="cgPassWrap">
       <p class="cg-sub">Enter your team passcode to sign in</p>
       <input type="password" id="cgPass" placeholder="Team passcode" autocomplete="current-password">
@@ -42,7 +42,7 @@
   </div>
   <div class="session-info">
     <span class="cloud-info" id="cloudWho"></span>
-    <span class="build-badge" title="Currently loaded app build">b260609v</span>
+    <span class="build-badge" title="Currently loaded app build">b260609w</span>
     <button class="btn sm cloud-info" id="cloudLogout" hidden>Sign out</button>
   </div>
 </header>
@@ -145,12 +145,12 @@
   <section class="members-area" id="membersArea" data-pane="tasks"></section>
 
   <!-- ============ TEAM ============ -->
-  <section class="panel" data-pane="team">
+  <section class="panel admin-only" data-pane="team">
     <h2>👥 Team <span class="pill" id="teamCount">0</span></h2>
     <div id="teamCards" class="team-cards"></div>
   </section>
 
-  <section class="panel" data-pane="team">
+  <section class="panel admin-only" data-pane="team">
     <h2>Manage members <span class="pill" id="memberCount">0</span></h2>
     <div class="group-bar">
       <span class="gb-label">Group</span>
