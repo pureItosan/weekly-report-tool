@@ -41,8 +41,9 @@ let editingProj = '';                              // projk currently being edit
 let projCats = store.load('wrt_projcats', []);     // user-added project categories (beyond the built-ins)
 let catOpen  = store.load('wrt_catopen', null);    // {cat:true/false} remembered expand/collapse of category groups
 let catFilter = '';                                // '' = show all categories; else only show this category (tab filter)
-let catalogView = store.load('wrt_catview', 'matrix');   // projects panel view: 'matrix' | 'tree' | 'cards'
+let catalogView = store.load('wrt_catview', 'tree');     // projects panel view: 'tree' | 'matrix'
 let treeExpand = {};                               // tree: which Customer Project's task branch is expanded (cp -> true)
+let taskGroupBy = store.load('wrt_taskgroup', 'member');   // Tasks view grouping: 'member' | 'project' | 'status'
 let autoAdd = store.load('wrt_autoadd', true);        // auto-create members from report owners
 let fuzzy   = store.load('wrt_fuzzy', true);          // allow nickname/typo/partial matching (default on)
 /* member GROUPS — named rosters that remember member order + roles + aliases.
@@ -921,7 +922,7 @@ function buildBuckets(){
 }
 
 function renderAll(){
-  renderGroups(); renderMembers(); renderBatches(); renderStats(); renderCatalog(); renderCharts(); renderFilters(); renderMembersArea(); renderWorkbenchSelect(); updateOcrBtn();
+  renderGroups(); renderMembers(); renderBatches(); renderStats(); renderHighlights(); renderCatalog(); renderCharts(); renderTeam(); renderFilters(); renderMembersArea(); renderWorkbenchSelect(); updateOcrBtn();
 }
 function renderFilters(){
   const ps=$('#filterProject'); if(ps){
@@ -938,6 +939,7 @@ function renderFilters(){
   const he=$('#hideEmptyChk'); if(he) he.checked=filters.hideEmpty;
   const fs=$('#filterStatus'); if(fs) fs.value=filters.status;
   const fr=$('#filterRole'); if(fr) fr.value=filters.role;
+  const tg=$('#taskGroupSel'); if(tg) tg.value=taskGroupBy;
 }
 
 function roleOptions(sel){ return '<option value="">—</option>'+ROLES.map(r=>`<option ${sel===r?'selected':''}>${r}</option>`).join(''); }
@@ -1114,6 +1116,7 @@ function deleteProjectGroup(projk){
   tasks.forEach(t=>{ if(ids.has(t.id)) (t.images||[]).forEach(im=>cloudDeleteImage(im.id)); });  // sync-delete cloud images
   tasks=tasks.filter(t=>!ids.has(t.id));
   delete projMeta[g.projk]; delete projMeta[projk];                 // also drop its master record
+  const mo=$('#projEditModal'); if(mo) mo.hidden=true;
   persist(); renderAll(); toast('Project deleted: '+g.label);
 }
 /* ---------- PROJECT MASTER LIST (manually added / pasted, stored in your cloud — never in the repo) ---------- */
@@ -1193,8 +1196,7 @@ function addBlankProject(){
   const code=prompt('New project code (e.g. B01W050.00):'); if(!code||!code.trim()) return;
   const k=projMasterKey(code);
   projMeta[k]=Object.assign({master:true, code:code.trim()}, projMeta[k]||{}, {master:true});
-  editingProj=k; persist(); renderCatalog();
-  const card=document.querySelector(`[data-projk="${k}"]`); if(card) card.scrollIntoView({behavior:'smooth',block:'center'});
+  persist(); renderCatalog(); openProjEdit(k);
 }
 function setProjPhase(projk, phase){ const m=projMeta[projk]||{}; m.phase=phase||''; projMeta[projk]=m; persist(); renderCatalog(); }
 
@@ -1460,15 +1462,15 @@ function renderCatalog(){
   if(catalogMember) groups=groups.map(g=>({...g, tasks:g.tasks.filter(t=>(t.ownerIds||[]).includes(catalogMember))}))
                                   .filter(g=>g.tasks.length);
   const cont=$('#projectCatalog'); if(!cont) return;
-  const views=[['matrix','▦ Matrix'],['tree','🌳 Tree'],['cards','▢ Cards']];
+  if(catalogView==='cards') catalogView='tree';                // Cards view retired -> Tree is the content
+  const views=[['tree','🌳 Tree'],['matrix','▦ Matrix']];
   const bar=`<div class="cat-viewtabs">
       ${views.map(([v,l])=>`<button class="cv-tab ${catalogView===v?'active':''}" data-catview="${v}">${l}</button>`).join('')}
-      <span class="cv-hint">Customer Project &amp; component are auto-grouped — paste the full matrix, or hit ✎ Edit to refine.</span>
+      <span class="cv-hint">Click ✎ on any project to edit · paste the full matrix to refresh grouping.</span>
     </div>`;
   if(!groups.length){ cont.innerHTML=bar+`<p class="hint">No projects yet — import reports, or use "＋ Add project / 📋 Paste project list" above.</p>`; return; }
-  if(catalogView==='cards'){ cont.innerHTML=bar+renderCatalogCardsHTML(groups); wireProjectDrag(); return; }
-  if(catalogView==='tree'){ cont.innerHTML=bar+renderTreeHTML(groups); return; }
-  cont.innerHTML=bar+renderMatrixHTML(groups);                 // default
+  if(catalogView==='matrix'){ cont.innerHTML=bar+renderMatrixHTML(groups); return; }
+  cont.innerHTML=bar+renderTreeHTML(groups);                  // default: Tree
 }
 function renderCatalogCardsHTML(groups){
   const byCat={}; groups.forEach(g=>{ const c=projCategory(g); (byCat[c]=byCat[c]||[]).push(g); });
@@ -1721,6 +1723,46 @@ function saveProjMeta(projk, card){
   const m=Object.assign({}, projMeta[projk]||{});   // keep existing fields (master/code/phase/chipset/schedule…)
   card.querySelectorAll('.pc-in').forEach(inp=>{ m[inp.dataset.mf]=inp.value.trim(); });
   projMeta[projk]=m; editingProj=''; persist(); renderCatalog();
+  const mo=$('#projEditModal'); if(mo) mo.hidden=true; toast('Project saved');
+}
+// project edit happens in a modal now (the Cards view was retired; Tree/Matrix are the read views)
+function openProjEdit(projk){
+  const g=projectGroups().find(x=>x.projk===resolveProjk(projk)) || projectGroups().find(x=>x.projk===projk);
+  if(!g){ toast('Project not found'); return; }
+  editingProj=g.projk;
+  const body=$('#projEditBody'); if(body) body.innerHTML=catalogCard(g);
+  const mo=$('#projEditModal'); if(mo) mo.hidden=false;
+}
+function closeProjEdit(){ const mo=$('#projEditModal'); if(mo) mo.hidden=true; editingProj=''; renderCatalog(); }
+// Dashboard: high-risk / overdue / in-progress highlight columns (each task clickable)
+function renderHighlights(){
+  const cont=$('#dashHighlights'); if(!cont) return;
+  const vt=visibleTasks();
+  const high=vt.filter(t=>t.risk==='High'&&!isClosed(t));
+  const today=new Date(); today.setHours(0,0,0,0);
+  const overdue=vt.filter(t=>{ const d=_sd(t.due); return d && d<today && !isClosed(t); });
+  const wip=vt.filter(t=>!isClosed(t) && (+t.progress||0)>0 && (+t.progress||0)<100);
+  const item=t=>`<button class="hl-item" data-opentask="${esc(t.id)}"><span class="hl-proj">${esc(pptPlabel(t))}</span><span class="hl-txt">${esc((t.current||t.next||'(no description)').replace(/\s+/g,' ').trim().slice(0,44))}</span></button>`;
+  const col=(icon,title,arr,cls)=>`<div class="hl-col"><div class="hl-head ${cls}">${icon} ${title} <span class="hl-n">${arr.length}</span></div>${arr.slice(0,6).map(item).join('')||'<div class="hl-empty">None 🎉</div>'}${arr.length>6?`<div class="hl-more">+${arr.length-6} more</div>`:''}</div>`;
+  cont.innerHTML=col('⚠️','High risk',high,'warn')+col('⏰','Overdue',overdue,'warn')+col('🔧','In progress',wip,'accent');
+}
+// Team: member cards (role, task load, avg progress) — click to see their tasks
+function renderTeam(){
+  const cont=$('#teamCards'); if(!cont) return;
+  const {map}=buildBuckets();
+  const tc=$('#teamCount'); if(tc) tc.textContent=members.length;
+  cont.innerHTML=members.map(m=>{
+    const ts=map.get(m.id)||[];
+    const high=ts.filter(t=>t.risk==='High'&&!isClosed(t)).length;
+    const closed=ts.filter(isClosed).length;
+    const prog=ts.length? Math.round(ts.reduce((s,t)=>s+(+t.progress||0),0)/ts.length):0;
+    const roles=[m.role,m.role2].filter(Boolean).join(' · ')||'—';
+    return `<button class="tmember" data-memrow="${esc(m.id)}" title="See ${esc(m.name)}'s tasks">
+      <div class="tm-top"><div class="tm-avatar">${esc((m.name||'?').trim().slice(0,1).toUpperCase())}</div>
+        <div class="tm-id"><div class="tm-name">${esc(memberDisplay(m))}</div><div class="tm-role">${esc(roles)}</div></div></div>
+      <div class="tm-stats"><span class="tm-tasks">${ts.length} task${ts.length===1?'':'s'}</span>${high?`<span class="tm-high">⚠ ${high}</span>`:''}${closed?`<span class="tm-done">✓ ${closed}</span>`:''}</div>
+      <div class="tm-bar" title="avg progress ${prog}%"><div class="tm-fill" style="width:${prog}%"></div></div></button>`;
+  }).join('') || '<p class="hint">No members yet — add them in “Manage members” below.</p>';
 }
 function renderCharts(){
   // workload per member — only members with tasks; note how many are pending
@@ -1762,16 +1804,33 @@ function renderMembersArea(){
   const filtering = filters.project || q || filters.status || filters.role;   // when filtering, hide members with no match
   let html=''; const shown=new Set();
 
-  members.forEach(m=>{
-    if(filters.member && filters.member!==m.id) return;
-    if(filters.role && m.role!==filters.role && m.role2!==filters.role) return;  // primary OR secondary discipline
-    const list=map.get(m.id).filter(matchTask); list.forEach(t=>shown.add(t.id));
-    if((filters.hideEmpty || filtering) && !list.length) return;
-    html+=memberBlock(memberDisplay(m), list, false, m.id);
-  });
-  if((!filters.member || filters.member==='__un__') && !filters.role){
-    const ul=unassigned.filter(matchTask); ul.forEach(t=>shown.add(t.id));
-    if(ul.length) html+=memberBlock('Unassigned', ul, true);
+  if(taskGroupBy!=='member'){                                   // group by Project or Status (flat task list)
+    const roleOf=id=>{ const mm=members.find(x=>x.id===id); return mm?[mm.role,mm.role2]:[]; };
+    const memOk=t=>{ if(!filters.member) return true; if(filters.member==='__un__') return !(t.ownerIds||[]).length; return (t.ownerIds||[]).includes(filters.member); };
+    const filt=visibleTasks().filter(t=> matchTask(t) && memOk(t) && (!filters.role || (t.ownerIds||[]).some(id=>roleOf(id).includes(filters.role))) );
+    filt.forEach(t=>shown.add(t.id));
+    let groups=[];
+    if(taskGroupBy==='project'){
+      const by={}; filt.forEach(t=>{ const k=pptPlabel(t)||'—'; (by[k]=by[k]||[]).push(t); });
+      groups=Object.keys(by).sort().map(k=>[k,by[k]]);
+    } else {                                                    // status board: High risk / In progress / Closed
+      const b={'⚠️ High risk':[], '🔧 In progress':[], '✅ Closed':[]};
+      filt.forEach(t=>{ if(isClosed(t)) b['✅ Closed'].push(t); else if(t.risk==='High') b['⚠️ High risk'].push(t); else b['🔧 In progress'].push(t); });
+      groups=Object.keys(b).filter(k=>b[k].length).map(k=>[k,b[k]]);
+    }
+    html=groups.map(([title,ts])=>groupBlock(title,ts)).join('');
+  } else {
+    members.forEach(m=>{
+      if(filters.member && filters.member!==m.id) return;
+      if(filters.role && m.role!==filters.role && m.role2!==filters.role) return;  // primary OR secondary discipline
+      const list=map.get(m.id).filter(matchTask); list.forEach(t=>shown.add(t.id));
+      if((filters.hideEmpty || filtering) && !list.length) return;
+      html+=memberBlock(memberDisplay(m), list, false, m.id);
+    });
+    if((!filters.member || filters.member==='__un__') && !filters.role){
+      const ul=unassigned.filter(matchTask); ul.forEach(t=>shown.add(t.id));
+      if(ul.length) html+=memberBlock('Unassigned', ul, true);
+    }
   }
 
   $('#membersArea').innerHTML = html ||
@@ -1791,6 +1850,12 @@ function memberBlock(name, list, isUnassigned, mid){
     ${mid?`<button class="btn sm add-task-btn" data-addtask="${mid}">＋ Add task</button>`:''}</div>${strip}`;
   const cards=list.length? `<div class="task-grid">${list.map(taskCard).join('')}</div>` : '';
   return `<div class="member-block" id="mblock-${mid||'unassigned'}">${head}${cards}</div>`;
+}
+// generic group block (used when Tasks are grouped by Project or Status instead of Member)
+function groupBlock(title, list){
+  const avg=list.length?Math.round(list.reduce((s,t)=>s+(+t.progress||0),0)/list.length):0;
+  const head=`<div class="member-head"><span class="name">${esc(title)}</span><span class="meta">${list.length} task${list.length===1?'':'s'} · avg ${avg}%</span></div>`;
+  return `<div class="member-block">${head}<div class="task-grid">${list.map(taskCard).join('')}</div></div>`;
 }
 // clicking a member in the left list jumps to their report on the right (reveals + highlights)
 function jumpToMember(mid){
@@ -2729,8 +2794,8 @@ function wireEvents(){
     // ----- catalog editing -----
     { const cv=t.closest('[data-catview]'); if(cv){ catalogView=cv.dataset.catview; store.save('wrt_catview',catalogView); renderCatalog(); return; } }
     { const te=t.closest('[data-treeexp]'); if(te){ const c=te.dataset.treeexp; treeExpand[c]=!treeExpand[c]; renderCatalog(); return; } }
-    if(t.dataset.editProj!==undefined){ if(catalogView!=='cards'){ catalogView='cards'; store.save('wrt_catview',catalogView); }  // editing lives in Cards view
-      editingProj = editingProj===t.dataset.editProj ? '' : t.dataset.editProj; renderCatalog(); return; }
+    if(t.dataset.editProj!==undefined){ const mo=$('#projEditModal');
+      if(mo && !mo.hidden && editingProj===t.dataset.editProj) closeProjEdit(); else openProjEdit(t.dataset.editProj); return; }
     if(t.dataset.saveProj!==undefined){ saveProjMeta(t.dataset.saveProj, t.closest('.proj-card')); return; }
     if(t.dataset.unmerge!==undefined){ unmergeProject(t.dataset.unmerge); return; }
     if(t.dataset.delproj!==undefined){ deleteProjectGroup(t.dataset.delproj); return; }
@@ -2764,6 +2829,7 @@ function wireEvents(){
   document.body.addEventListener('change', e=>{
     const el=e.target;
     if(el.id==='catalogMember'){ catalogMember=el.value; renderCatalog(); return; }
+    if(el.id==='taskGroupSel'){ taskGroupBy=el.value; store.save('wrt_taskgroup',taskGroupBy); renderMembersArea(); return; }
     if(el.id==='filterRole'){ filters.role=el.value; renderMembersArea(); return; }
     if(el.dataset.setrole!==undefined){ setMemberRole(el.dataset.setrole, el.value); return; }
     if(el.dataset.setrole2!==undefined){ setMemberRole2(el.dataset.setrole2, el.value); return; }
