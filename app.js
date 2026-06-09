@@ -1920,7 +1920,7 @@ function openTask(id){
   const t=tasks.find(x=>x.id===id); if(!t) return;
   _openTaskId=id;
   const owners=(t.ownerIds||[]).map(memberName).join(', ')||'—';
-  const imgs=(t.images||[]).map(im=>`<img src="${im.data}" data-light="${im.id}">`).join('');
+  const imgs=(t.images||[]).map(im=>`<img src="${im.data}" data-light="${im.id}" loading="lazy" decoding="async">`).join('');
   $('#taskModalInner').innerHTML=`
     <div class="modal-head"><h2>${esc(t.projectLabel||t.project)}</h2><button class="icon-btn" data-close>✕</button></div>
     <div class="modal-body detail">
@@ -1958,7 +1958,7 @@ function openTask(id){
       <div class="section-title">Attachments (delete one-by-one or clear all; exports and cloud stay in sync)
         ${(t.images||[]).length?`<button class="btn xs danger clearimg-btn" data-clearimg="${t.id}">🗑 Clear all (${t.images.length})</button>`:''}</div>
       <div class="imgs editable">
-        ${(t.images||[]).map(im=>`<span class="img-edit"><img src="${im.data}" data-light="${im.id}"><button class="img-del" data-delimg="${t.id}|${im.id}" title="Delete this image">✕</button></span>`).join('')}
+        ${(t.images||[]).map(im=>`<span class="img-edit"><img src="${im.data}" data-light="${im.id}" loading="lazy" decoding="async"><button class="img-del" data-delimg="${t.id}|${im.id}" title="Delete this image">✕</button></span>`).join('')}
         <label class="img-add" title="Add / replace images">＋ Image<input type="file" accept="image/*" multiple hidden data-addimg="${t.id}"></label>
       </div>
     </div>

@@ -445,7 +445,7 @@ label.check input{width:auto}
 .card .card-del:hover{color:var(--danger)}
 
 /* modal */
-.modal-overlay{position:fixed;inset:0;background:rgba(4,8,14,.7);backdrop-filter:blur(3px);
+.modal-overlay{position:fixed;inset:0;background:rgba(4,8,14,.76);
   display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}
 .modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;width:min(720px,100%);
   max-height:90vh;display:flex;flex-direction:column;box-shadow:var(--shadow)}
@@ -512,7 +512,7 @@ label.check input{width:auto}
   .charts{grid-template-columns:1fr}.form-grid{grid-template-columns:1fr}}
 
 /* ===== polish v2 — more depth & detail (structure unchanged) ===== */
-.modal-overlay{backdrop-filter:blur(7px);background:rgba(6,9,15,.62)}
+.modal-overlay{background:rgba(6,9,15,.76)}
 .modal{border-radius:18px;box-shadow:0 44px 100px -34px rgba(0,0,0,.85),0 0 0 1px rgba(255,255,255,.04)}
 .member-chips li{transition:border-color .15s,transform .12s,box-shadow .15s;box-shadow:var(--shadow-sm)}
 .member-chips li:hover{transform:translateX(2px);border-color:var(--line-soft)}

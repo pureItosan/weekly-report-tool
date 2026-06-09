@@ -455,7 +455,7 @@ label.check input{width:auto}
 .card .card-del:hover{color:var(--danger)}
 
 /* modal */
-.modal-overlay{position:fixed;inset:0;background:rgba(4,8,14,.7);backdrop-filter:blur(3px);
+.modal-overlay{position:fixed;inset:0;background:rgba(4,8,14,.76);
   display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}
 .modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;width:min(720px,100%);
   max-height:90vh;display:flex;flex-direction:column;box-shadow:var(--shadow)}
@@ -522,7 +522,7 @@ label.check input{width:auto}
   .charts{grid-template-columns:1fr}.form-grid{grid-template-columns:1fr}}
 
 /* ===== polish v2 — more depth & detail (structure unchanged) ===== */
-.modal-overlay{backdrop-filter:blur(7px);background:rgba(6,9,15,.62)}
+.modal-overlay{background:rgba(6,9,15,.76)}
 .modal{border-radius:18px;box-shadow:0 44px 100px -34px rgba(0,0,0,.85),0 0 0 1px rgba(255,255,255,.04)}
 .member-chips li{transition:border-color .15s,transform .12s,box-shadow .15s;box-shadow:var(--shadow-sm)}
 .member-chips li:hover{transform:translateX(2px);border-color:var(--line-soft)}
@@ -654,7 +654,7 @@ select.proj-edit{width:100%;min-width:210px}
   <div class="cg-box">
     <div class="cg-logo">📋</div>
     <h2>Weekly Report Hub</h2>
-    <div class="cg-ver">build 260609za</div>
+    <div class="cg-ver">build 260609zb</div>
     <div id="cgPassWrap">
       <p class="cg-sub">Enter your team passcode to sign in</p>
       <input type="password" id="cgPass" placeholder="Team passcode" autocomplete="current-password">
@@ -681,7 +681,7 @@ select.proj-edit{width:100%;min-width:210px}
   </div>
   <div class="session-info">
     <span class="cloud-info" id="cloudWho"></span>
-    <span class="build-badge" title="Currently loaded app build">b260609za</span>
+    <span class="build-badge" title="Currently loaded app build">b260609zb</span>
     <button class="btn sm cloud-info" id="cloudLogout" hidden>Sign out</button>
   </div>
 </header>
@@ -2925,7 +2925,7 @@ function openTask(id){
   const t=tasks.find(x=>x.id===id); if(!t) return;
   _openTaskId=id;
   const owners=(t.ownerIds||[]).map(memberName).join(', ')||'—';
-  const imgs=(t.images||[]).map(im=>`<img src="${im.data}" data-light="${im.id}">`).join('');
+  const imgs=(t.images||[]).map(im=>`<img src="${im.data}" data-light="${im.id}" loading="lazy" decoding="async">`).join('');
   $('#taskModalInner').innerHTML=`
     <div class="modal-head"><h2>${esc(t.projectLabel||t.project)}</h2><button class="icon-btn" data-close>✕</button></div>
     <div class="modal-body detail">
@@ -2963,7 +2963,7 @@ function openTask(id){
       <div class="section-title">Attachments (delete one-by-one or clear all; exports and cloud stay in sync)
         ${(t.images||[]).length?`<button class="btn xs danger clearimg-btn" data-clearimg="${t.id}">🗑 Clear all (${t.images.length})</button>`:''}</div>
       <div class="imgs editable">
-        ${(t.images||[]).map(im=>`<span class="img-edit"><img src="${im.data}" data-light="${im.id}"><button class="img-del" data-delimg="${t.id}|${im.id}" title="Delete this image">✕</button></span>`).join('')}
+        ${(t.images||[]).map(im=>`<span class="img-edit"><img src="${im.data}" data-light="${im.id}" loading="lazy" decoding="async"><button class="img-del" data-delimg="${t.id}|${im.id}" title="Delete this image">✕</button></span>`).join('')}
         <label class="img-add" title="Add / replace images">＋ Image<input type="file" accept="image/*" multiple hidden data-addimg="${t.id}"></label>
       </div>
     </div>
