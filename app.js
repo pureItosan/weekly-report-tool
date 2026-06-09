@@ -41,6 +41,7 @@ let editingProj = '';                              // projk currently being edit
 let projCats = store.load('wrt_projcats', []);     // user-added project categories (beyond the built-ins)
 let catOpen  = store.load('wrt_catopen', null);    // {cat:true/false} remembered expand/collapse of category groups
 let catFilter = '';                                // '' = show all categories; else only show this category (tab filter)
+let catalogView = store.load('wrt_catview', 'matrix');   // projects panel view: 'matrix' | 'tree' | 'cards'
 let autoAdd = store.load('wrt_autoadd', true);        // auto-create members from report owners
 let fuzzy   = store.load('wrt_fuzzy', true);          // allow nickname/typo/partial matching (default on)
 /* member GROUPS — named rosters that remember member order + roles + aliases.
@@ -1126,11 +1127,37 @@ function mergeField(a,b){                               // union of "/"-separate
   const out=[]; (a+' / '+b).split(/\s*\/\s*/).forEach(x=>{ x=x.trim(); if(x && !out.some(y=>y.toLowerCase()===x.toLowerCase())) out.push(x); });
   return out.join(' / ');
 }
-function parseProjectList(text){                        // one project per line: 代號 | 客戶 | 類別 | Chipset | 說明
-  return String(text||'').split('\n').map(l=>l.trim()).filter(Boolean).map(line=>{
-    if(/^(代號|code|customer|客戶)\b/i.test(line)) return null;   // skip a header row
-    const p=line.split('|').map(s=>s.trim());
-    if(p.length<2 || !p[0]) return null;
+// Accepts the full project MATRIX (Customer | Product Type | Customer Project | Component | Model | Chipset),
+// separated by | or TAB. Merged cells (blank leading columns on continuation rows) are filled down.
+// Falls back to the legacy 5-col format (Code | Customer | Category | Chipset | Description).
+function parseProjectList(text){
+  const lines=String(text||'').split('\n').filter(l=>l.trim());
+  if(!lines.length) return [];
+  const split=l=>l.split(/\t|\|/).map(s=>s.trim());
+  const isModelCode=s=>/^[A-Z]?\d{2,}[A-Z.\d]/i.test(String(s||'').trim());   // B01W025T02 / 95.3823T00
+  const HCELL=/^(customer|客戶|code|代號|product\s*type|customer\s*project|product\s*category|model|chipset)$/i;
+  const isHeader=line=>{ const p=split(line); return p.length>=3 && HCELL.test((p[0]||'').trim()); };   // exact first-cell match (so "Customer A" data rows survive)
+  const firstData=split(lines.find(l=>!isHeader(l))||'');
+  const looksMatrix=/product\s*type|customer\s*project|product\s*category/i.test(lines[0])
+                    || (firstData.length>=5 && !isModelCode(firstData[0]));
+  if(looksMatrix){
+    const carry={cust:'',type:'',cp:''}; const out=[];
+    lines.forEach(line=>{
+      if(isHeader(line)) return;          // header row
+      let [cust,type,cp,comp,model,chip]=split(line).map(s=>s||'');
+      if(cust) carry.cust=cust; else cust=carry.cust;                                // fill down merged cells
+      if(type) carry.type=type; else type=carry.type;
+      if(cp&&cp!=='-') carry.cp=cp; else if(cp==='-'){ carry.cp=''; cp=''; } else cp=carry.cp;
+      if(!model && comp && isModelCode(comp)){ model=comp; comp=''; }                // tolerate rows with no component col
+      model=model.trim(); if(!model) return;
+      const code=model.split('/')[0].trim(); if(!code) return;
+      out.push({code, customer:cust, category:type, custProj:cp, component:comp, chipset:(chip||'').replace(/^chipset\s*[:：]\s*/i,''), desc:model});
+    });
+    return out;
+  }
+  return lines.map(line=>{                                                           // legacy format
+    if(/^(代號|code|customer|客戶)\b/i.test(line)) return null;
+    const p=split(line); if(p.length<2 || !p[0]) return null;
     return {code:p[0], customer:p[1]||'', category:p[2]||'', chipset:p[3]||'', desc:p[4]||''};
   }).filter(Boolean);
 }
@@ -1151,7 +1178,8 @@ function importProjectList(text){
     const ex=projMeta[k]||{};
     projMeta[k]=Object.assign({}, ex, { master:true,
       code:mergeField(ex.code,r.code), customer:mergeField(ex.customer,r.customer),
-      category:cat||ex.category||'', chipset:mergeField(ex.chipset,r.chipset), desc:mergeField(ex.desc,r.desc) });
+      category:cat||ex.category||'', chipset:mergeField(ex.chipset,r.chipset), desc:mergeField(ex.desc,r.desc),
+      custProj:r.custProj||ex.custProj||'', component:r.component||ex.component||'' });
   });
   // when a base code is split into variants, drop any stale MERGED master left at the base key (unless real tasks use it)
   Object.keys(cnt).forEach(b=>{ if(cnt[b]>1 && projMeta[b] && projMeta[b].master && !keys.has(b)
@@ -1425,19 +1453,27 @@ function inferCategory(projStr){
 function projCategory(g){ const m=projMeta[g.projk]||{}; return m.category && allCats().includes(m.category)? m.category : (m.category||inferCategory(g.projStr||g.label)); }
 function renderCatalog(){
   const sel=$('#catalogMember');
-  if(sel) sel.innerHTML='<option value="">All members · All members</option>'+
+  if(sel) sel.innerHTML='<option value="">All members</option>'+
     members.map(m=>`<option value="${m.id}" ${catalogMember===m.id?'selected':''}>${esc(m.name)}</option>`).join('');
   let groups=projectGroups();
   if(catalogMember) groups=groups.map(g=>({...g, tasks:g.tasks.filter(t=>(t.ownerIds||[]).includes(catalogMember))}))
                                   .filter(g=>g.tasks.length);
   const cont=$('#projectCatalog'); if(!cont) return;
-  if(!groups.length){
-    cont.innerHTML=`<div class="cat-tabs"><button class="btn xs primary cat-addtab" data-addcat="1">＋ Add category</button></div><p class="hint">No projects yet — import reports, or use "＋ Add project / Paste list" above.</p>`; return; }
+  const views=[['matrix','▦ Matrix'],['tree','🌳 Tree'],['cards','▢ Cards']];
+  const bar=`<div class="cat-viewtabs">
+      ${views.map(([v,l])=>`<button class="cv-tab ${catalogView===v?'active':''}" data-catview="${v}">${l}</button>`).join('')}
+      <span class="cv-hint">Customer Project &amp; component are auto-grouped — paste the full matrix, or hit ✎ Edit to refine.</span>
+    </div>`;
+  if(!groups.length){ cont.innerHTML=bar+`<p class="hint">No projects yet — import reports, or use "＋ Add project / 📋 Paste project list" above.</p>`; return; }
+  if(catalogView==='cards'){ cont.innerHTML=bar+renderCatalogCardsHTML(groups); wireProjectDrag(); return; }
+  if(catalogView==='tree'){ cont.innerHTML=bar+renderTreeHTML(groups); return; }
+  cont.innerHTML=bar+renderMatrixHTML(groups);                 // default
+}
+function renderCatalogCardsHTML(groups){
   const byCat={}; groups.forEach(g=>{ const c=projCategory(g); (byCat[c]=byCat[c]||[]).push(g); });
   const order=[...allCats(), ...Object.keys(byCat).filter(c=>!allCats().includes(c))];
   const present=order.filter(c=>byCat[c]);
   if(catFilter && !byCat[catFilter]) catFilter='';            // selected tab emptied -> back to all
-  // ONE tab bar = filter + manage. Click a tab -> show only that category's projects (flat, no extra collapse).
   const tab=(c,lbl,n,manage)=>`<button class="cat-tab cat-${esc(c)} ${catFilter===c?'active':''}" data-catfilter="${esc(c)}">${esc(lbl)} <span class="ct-n">${n}</span>${manage?`<span class="cc-x" data-renamecat="${esc(c)}" title="Rename">✎</span><span class="cc-x" data-delcat="${esc(c)}" title="Delete category">✕</span>`:''}</button>`;
   const tabBar=`<div class="cat-tabs">
       ${tab('','All',groups.length,false)}
@@ -1450,8 +1486,94 @@ function renderCatalog(){
     const head = catFilter ? '' : `<div class="cat-sec-head"><span class="cat-name cat-${esc(c)}">${esc(c)}</span><span class="cat-meta">${list.length} projects · ${nTasks} tasks</span></div>`;
     return head + `<div class="cat-sec">${list.map(catalogCard).join('')}</div>`;
   }).join('');
-  cont.innerHTML = tabBar + sections;
-  wireProjectDrag();
+  return tabBar + sections;
+}
+// ---- Customer-Project (ID525) + component (Mainboard/Module/ME) derivation, until the richer matrix import fills them ----
+function projCustProj(g){
+  const m=projMeta[g.projk]||{};
+  if(m.custProj) return String(m.custProj).trim();
+  const hay=[m.code,g.label,m.desc,g.projStr].filter(Boolean).join('  ');
+  const t=hay.match(/\b(ID|DG|CM)[\s-]?(\d{2,4})\b/i);
+  return t? (t[1].toUpperCase()+t[2]) : '';
+}
+function projComponent(g){
+  const m=projMeta[g.projk]||{};
+  if(m.component) return String(m.component).trim();
+  const code=String(m.code||g.label||'').toUpperCase();
+  if(/\.\d{2}\b/.test(code)) return 'ME';                       // B01W036.00 -> mechanical
+  if(/T0+\b/.test(code)) return 'Mainboard';                    // ...T00 -> mainboard
+  if(/T\d+\b/.test(code)) return 'Module';                      // ...T02 -> module
+  return '';
+}
+function projTree(groups){                                      // Product Type -> Customer Project -> [project leaves]
+  const types={};
+  groups.forEach(g=>{
+    const ty=projCategory(g)||'General', cp=projCustProj(g), cust=(projMeta[g.projk]||{}).customer||'';
+    const key=cp||(cust?('·'+cust+'·'+g.label):g.label);
+    const T=(types[ty]=types[ty]||{order:[],map:{}});
+    if(!T.map[key]){ T.map[key]={cp,cust,label:cp||cust||g.label,items:[]}; T.order.push(key); }
+    T.map[key].items.push(g);
+  });
+  return types;
+}
+function projTypeOrder(types){
+  const cats=allCats();
+  return Object.keys(types).sort((a,b)=>{ const ia=cats.indexOf(a), ib=cats.indexOf(b); return (ia<0?99:ia)-(ib<0?99:ib); });
+}
+function renderMatrixHTML(groups){
+  const types=projTree(groups);
+  let html='<div class="pmatrix-wrap">';
+  projTypeOrder(types).forEach(ty=>{
+    const block=types[ty], nProj=block.order.reduce((s,k)=>s+block.map[k].items.length,0);
+    let rows='';
+    block.order.forEach(key=>{
+      const grp=block.map[key], multi=grp.items.length>1;
+      grp.items.forEach((g,idx)=>{
+        const m=projMeta[g.projk]||{};
+        rows+=`<tr class="${multi&&idx===0?'pm-grp-start':''}">
+          <td class="pm-cust">${idx===0?esc(grp.cust||'—'):''}</td>
+          <td class="pm-cp">${idx===0?esc(grp.cp||(grp.cust?'':'—')):''}</td>
+          <td class="pm-comp">${esc(projComponent(g)||'—')}</td>
+          <td class="pm-model"><b>${esc(m.code||g.label)}</b></td>
+          <td class="pm-chip">${esc(m.chipset||'—')}</td>
+          <td class="pm-tasks">${g.tasks.length||'·'}</td>
+          <td class="pm-act">
+            <button class="btn xs" data-sched="${esc(g.projk)}" title="Schedule timeline">📅</button>
+            <button class="btn xs" data-edit-proj="${esc(g.projk)}" title="Edit details">✎</button>
+            <button class="btn xs danger" data-delproj="${esc(g.projk)}" title="Delete project">🗑</button>
+          </td></tr>`;
+      });
+    });
+    html+=`<div class="pm-type"><span class="pm-type-name cat-${esc(ty)}">${esc(ty)}</span><span class="pm-type-n">${nProj} model${nProj>1?'s':''}</span></div>
+      <table class="pmatrix"><thead><tr><th>Customer</th><th>Customer&nbsp;Project</th><th>Component</th><th>Model</th><th>Chipset</th><th>Tasks</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  });
+  return html+'</div>';
+}
+function renderTreeHTML(groups){
+  const types=projTree(groups);
+  let html='<div class="ptree-wrap">';
+  projTypeOrder(types).forEach(ty=>{
+    const block=types[ty];
+    html+=`<div class="ptree-type cat-${esc(ty)}">${esc(ty)}</div>`;
+    block.order.forEach(key=>{
+      const grp=block.map[key];
+      const leaves=grp.items.map(g=>{
+        const m=projMeta[g.projk]||{};
+        return `<button class="ptree-leaf" data-edit-proj="${esc(g.projk)}" title="Edit ${esc(m.code||g.label)}">
+          <span class="ptl-comp">${esc(projComponent(g)||'Model')}</span>
+          <span class="ptl-code">${esc(m.code||g.label)}</span>
+          ${m.chipset?`<span class="ptl-chip">${esc(m.chipset)}</span>`:''}
+          ${g.tasks.length?`<span class="ptl-tasks">${g.tasks.length} task${g.tasks.length>1?'s':''}</span>`:''}
+        </button>`;
+      }).join('');
+      html+=`<div class="ptree-row">
+        <div class="ptree-node ptn-cp">${esc(grp.cp||grp.label)}${(grp.cust&&grp.cp)?`<span class="ptn-sub">${esc(grp.cust)}</span>`:''}</div>
+        <div class="ptree-conn"></div>
+        <div class="ptree-leaves">${leaves}</div>
+      </div>`;
+    });
+  });
+  return html+'</div>';
 }
 function optTags(arr,val){ return arr.map(x=>`<option ${x===val?'selected':''}>${x}</option>`).join(''); }
 function catalogCard(g){
@@ -2582,7 +2704,9 @@ function wireEvents(){
     if(t.dataset.light){ openLight(t.getAttribute('src')); return; }
     if(t.dataset.exportMember!==undefined){ if(t.dataset.exportMember) exportWord([t.dataset.exportMember]); else toast('This task has no matching member'); return; }
     // ----- catalog editing -----
-    if(t.dataset.editProj!==undefined){ editingProj = editingProj===t.dataset.editProj ? '' : t.dataset.editProj; renderCatalog(); return; }
+    { const cv=t.closest('[data-catview]'); if(cv){ catalogView=cv.dataset.catview; store.save('wrt_catview',catalogView); renderCatalog(); return; } }
+    if(t.dataset.editProj!==undefined){ if(catalogView!=='cards'){ catalogView='cards'; store.save('wrt_catview',catalogView); }  // editing lives in Cards view
+      editingProj = editingProj===t.dataset.editProj ? '' : t.dataset.editProj; renderCatalog(); return; }
     if(t.dataset.saveProj!==undefined){ saveProjMeta(t.dataset.saveProj, t.closest('.proj-card')); return; }
     if(t.dataset.unmerge!==undefined){ unmergeProject(t.dataset.unmerge); return; }
     if(t.dataset.delproj!==undefined){ deleteProjectGroup(t.dataset.delproj); return; }

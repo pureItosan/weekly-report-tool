@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Weekly Report Hub</title>
-<link rel="stylesheet" href="styles.css?v=260609l">
+<link rel="stylesheet" href="styles.css?v=260609m">
 </head>
 <body>
 <!-- ===== CLOUD LOGIN GATE (online only) ===== -->
@@ -15,7 +15,7 @@
   <div class="cg-box">
     <div class="cg-logo">📋</div>
     <h2>Weekly Report Hub</h2>
-    <div class="cg-ver">build 260609l</div>
+    <div class="cg-ver">build 260609m</div>
     <div id="cgPassWrap">
       <p class="cg-sub">Enter your team passcode to sign in</p>
       <input type="password" id="cgPass" placeholder="Team passcode" autocomplete="current-password">
@@ -51,7 +51,7 @@
   </div>
   <div class="session-info">
     <span class="cloud-info" id="cloudWho"></span>
-    <span class="build-badge" title="Currently loaded app build">b260609l</span>
+    <span class="build-badge" title="Currently loaded app build">b260609m</span>
     <button class="btn sm cloud-info" id="cloudLogout" hidden>Sign out</button>
   </div>
 </header>
@@ -242,11 +242,11 @@
       <button class="icon-btn" data-close>✕</button>
     </div>
     <div class="modal-body">
-      <p class="hint">One project per line, fields separated by <code>|</code> (trailing fields optional):<br>
-        <code>Code | Customer | Category | Chipset | Description</code><br>
-        e.g. <code>BXX01.00 | Customer A | IDU | ChipX / ChipY | description</code><br>
-        Same codes merge automatically; unknown categories are created; existing tasks auto-link by code.</p>
-      <textarea id="projListText" rows="14" placeholder="BXX01.00 | Customer A | IDU | ChipX | description&#10;BXX02.00 | Customer B | Module | ChipZ | description"></textarea>
+      <p class="hint">One model per line — paste your project <b>Matrix</b>. Columns separated by <code>|</code> or Tab:<br>
+        <code>Customer | Product Type | Customer Project | Component | Model | Chipset</code><br>
+        e.g. <code>Customer A | IDU | IDX01 | Mainboard Wi-Fi PCB | BXX01T00 | WiFi7 ChipX</code><br>
+        Leave leading columns blank on continuation rows (merged cells fill down). Legacy <code>Code | Customer | Category | Chipset | Desc</code> still works.</p>
+      <textarea id="projListText" rows="14" placeholder="Customer A | IDU | IDX01 | Mainboard Wi-Fi PCB | BXX01T00 | WiFi7 ChipX&#10; |  |  | 5G Module | BXX02T02 | ChipZ&#10; |  |  | IDU ME | BXX01.00 | "></textarea>
     </div>
     <div class="modal-foot">
       <button class="btn" data-close>Cancel</button>
