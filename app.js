@@ -1482,7 +1482,7 @@ function catalogCard(g){
        </div>`;
   const merged=Object.keys(projMerge).filter(k=>resolveProjk(k)===g.projk).length;
   const chipLine=meta.chipset?` · <span class="pc-chipset">Chipset: ${esc(meta.chipset)}</span>`:'';
-  const masterTag=(meta.master&&!g.tasks.length)?' <span class="master-tag" title="Master project (no tasks yet)">Master</span>':'';
+  const masterTag=(meta.master&&!g.tasks.length)?' <span class="master-tag" title="From your project master list · no tasks reported yet">No tasks</span>':'';
   return `<div class="proj-card cat-b-${esc(curCat)}" draggable="true" data-projk="${esc(g.projk)}">
     <div class="pc-head">
       <div><h3><span class="drag-dot" title="Drag to merge into another project">⠿</span> ${esc(g.label)}${masterTag}${merged?` <span class="merged-tag" title="Merged into another project">＋${merged} merged</span>`:''}</h3><div class="pc-sub">${sub}${chipLine}</div></div>
