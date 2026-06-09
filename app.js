@@ -1968,12 +1968,25 @@ function openTask(id){
       <button class="btn" data-close>Close</button>
     </div>`;
   $('#taskModal').hidden=false;
-  // defer the heavy base64 attachments so the modal pops open instantly; w/h avoid a layout-time decode
-  if((t.images||[]).length){
-    const html=t.images.map(im=>`<span class="img-edit"><img src="${im.data}" data-light="${im.id}"${im.w&&im.h?` width="${im.w}" height="${im.h}"`:''} loading="lazy" decoding="async"><button class="img-del" data-delimg="${t.id}|${im.id}" title="Delete this image">✕</button></span>`).join('');
-    requestAnimationFrame(()=>{ const box=$('#taskImgsBox'), add=box&&box.querySelector('.img-add');
-      if(add && _openTaskId===t.id) add.insertAdjacentHTML('beforebegin', html); });
-  }
+  loadTaskImages(t);   // decode attachments OFF the main thread (img.decode), then insert — open is instant & the NEXT open never blocks
+}
+// decode each base64 attachment off-thread, then append the already-decoded image (cheap paint, no main-thread stall)
+function loadTaskImages(t){
+  const box=$('#taskImgsBox'); if(!box) return; const add=box.querySelector('.img-add');
+  (t.images||[]).forEach(im=>{
+    const img=new Image(); img.decoding='async'; img.setAttribute('data-light', im.id);
+    if(im.w&&im.h){ img.width=im.w; img.height=im.h; }
+    let done=false;
+    const finish=()=>{ if(done) return; done=true;
+      if(_openTaskId!==t.id || !box.isConnected || !box.contains(add)) return;
+      const span=document.createElement('span'); span.className='img-edit'; span.appendChild(img);
+      const del=document.createElement('button'); del.className='img-del';
+      del.setAttribute('data-delimg', t.id+'|'+im.id); del.title='Delete this image'; del.textContent='✕';
+      span.appendChild(del); box.insertBefore(span, add); };
+    img.src=im.data;
+    if(img.decode) img.decode().then(finish, finish); else { img.onload=finish; img.onerror=finish; }
+    setTimeout(finish, 2500);                            // safety net: always show images even if decode() never settles
+  });
 }
 
 /* ---------- project drill-down: all tasks under a project ---------- */
