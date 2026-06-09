@@ -2851,7 +2851,7 @@ function openLight(src){ $('#lightboxImg').src=src; $('#lightbox').hidden=false;
 /* ---------- view tabs (less scrolling) ---------- */
 let currentView=store.load('wrt_view','dashboard');
 function setView(v){
-  const MIGRATE={catalog:'dashboard', members:'dashboard', workload:'dashboard'};   // old IA view names -> land on the new Dashboard
+  const MIGRATE={catalog:'projects', members:'tasks', workload:'team'};   // old view names -> their new-IA equivalents
   v=MIGRATE[v]||v;
   if(!['dashboard','projects','tasks','team'].includes(v)) v='dashboard';
   currentView=v; store.save('wrt_view',v);
