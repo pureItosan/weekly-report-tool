@@ -1509,7 +1509,7 @@ function projTree(groups){                                      // Product Type 
   const types={};
   groups.forEach(g=>{
     const ty=projCategory(g)||'General', cp=projCustProj(g), cust=(projMeta[g.projk]||{}).customer||'';
-    const key=cp||(cust?('·'+cust+'·'+g.label):g.label);
+    const key=cp?(cust+'|'+cp):(cust?('·'+cust+'·'+g.label):g.label);   // same project name under different customers (e.g. DG500) stays separate
     const T=(types[ty]=types[ty]||{order:[],map:{}});
     if(!T.map[key]){ T.map[key]={cp,cust,label:cp||cust||g.label,items:[]}; T.order.push(key); }
     T.map[key].items.push(g);
