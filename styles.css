@@ -589,15 +589,15 @@ label.check input{width:auto}
 /* Dashboard highlights */
 .hl-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
 .hl-col{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:7px}
-.hl-head{font-size:12.5px;font-weight:700;display:flex;align-items:center;gap:7px;padding-bottom:7px;border-bottom:1px solid var(--line-soft)}
+.hl-head{font-size:13.5px;font-weight:700;display:flex;align-items:center;gap:7px;padding-bottom:8px;border-bottom:1px solid var(--line-soft)}
 .hl-head.warn{color:var(--warn)} .hl-head.accent{color:var(--accent)}
 .hl-n{margin-left:auto;background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:1px 9px;font-size:11.5px;color:var(--muted)}
-.hl-item{display:flex;flex-direction:column;gap:2px;background:#0c1422;border:1px solid #233348;border-radius:8px;padding:8px 11px;text-align:left;cursor:pointer;transition:border-color .12s,transform .12s}
+.hl-item{display:flex;flex-direction:column;gap:4px;background:#0c1422;border:1px solid #233348;border-radius:9px;padding:11px 14px;text-align:left;cursor:pointer;transition:border-color .12s,transform .12s}
 .hl-item:hover{border-color:var(--accent);transform:translateX(2px)}
-.hl-proj{font-size:11px;color:var(--accent);font-weight:700;font-family:ui-monospace,Menlo,Consolas,monospace}
-.hl-txt{font-size:12.5px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.hl-empty{color:var(--muted);font-size:12.5px;padding:6px 2px}
-.hl-more{color:var(--accent);font-size:11.5px;font-weight:600;padding:2px}
+.hl-proj{font-size:12px;color:var(--accent);font-weight:700;font-family:ui-monospace,Menlo,Consolas,monospace;letter-spacing:.2px}
+.hl-txt{font-size:14px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.35}
+.hl-empty{color:var(--muted);font-size:13.5px;padding:6px 2px}
+.hl-more{color:var(--accent);font-size:13px;font-weight:600;padding:4px 2px}
 /* Team cards */
 .team-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
 .tmember{display:flex;flex-direction:column;gap:9px;background:var(--panel2);border:1px solid var(--line);border-radius:13px;padding:13px 15px;text-align:left;cursor:pointer;transition:border-color .15s,transform .12s,box-shadow .15s;font:inherit;color:inherit}
