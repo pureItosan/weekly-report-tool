@@ -1918,6 +1918,7 @@ function taskCard(t){
 let _openTaskId='';
 function openTask(id){
   const t=tasks.find(x=>x.id===id); if(!t) return;
+  document.querySelectorAll('#taskImgsBox img').forEach(im=>{ try{ im.src=''; }catch(e){} });   // release the previous task's decoded image bitmaps so memory doesn't pile up on rapid opens
   _openTaskId=id;
   const owners=(t.ownerIds||[]).map(memberName).join(', ')||'—';
   const imgs=(t.images||[]).map(im=>`<img src="${im.data}" data-light="${im.id}" loading="lazy" decoding="async">`).join('');
@@ -1976,8 +1977,8 @@ function loadTaskImages(t){
   (t.images||[]).forEach(im=>{
     const img=new Image(); img.decoding='async'; img.setAttribute('data-light', im.id);
     if(im.w&&im.h){ img.width=im.w; img.height=im.h; }
-    let done=false;
-    const finish=()=>{ if(done) return; done=true;
+    let done=false, tid=0;
+    const finish=()=>{ if(done) return; done=true; if(tid){ clearTimeout(tid); tid=0; }
       if(_openTaskId!==t.id || !box.isConnected || !box.contains(add)) return;
       const span=document.createElement('span'); span.className='img-edit'; span.appendChild(img);
       const del=document.createElement('button'); del.className='img-del';
@@ -1985,7 +1986,7 @@ function loadTaskImages(t){
       span.appendChild(del); box.insertBefore(span, add); };
     img.src=im.data;
     if(img.decode) img.decode().then(finish, finish); else { img.onload=finish; img.onerror=finish; }
-    setTimeout(finish, 2500);                            // safety net: always show images even if decode() never settles
+    tid=setTimeout(finish, 2500);                        // safety net, cleared once decode settles so it never pins memory
   });
 }
 
