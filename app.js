@@ -1490,6 +1490,18 @@ function projComponent(g){
   if(/T\d+\b/.test(code)) return 'Module';                      // ...T02 -> module
   return '';
 }
+// <option>s for a project picker (value = projk) — constrains entry to known projects (no more free-typed junk)
+function projectOptionsHTML(curProjk){
+  const all=projectGroups().map(g=>{ const m=projMeta[g.projk]||{}; const cp=m.custProj||projCustProj(g), comp=m.component||projComponent(g);
+    return {projk:g.projk, master:!!m.master, label:m.master? `${m.code||g.label}${cp?' · '+cp:''}${comp?' · '+comp:''}` : g.label}; });
+  const tag=o=>`<option value="${esc(o.projk)}" ${curProjk===o.projk?'selected':''}>${esc(o.label)}</option>`;
+  const master=all.filter(o=>o.master).sort((a,b)=>a.label.localeCompare(b.label));
+  const other=all.filter(o=>!o.master).sort((a,b)=>a.label.localeCompare(b.label));
+  const hasCur=all.some(o=>o.projk===curProjk);
+  return `${(!hasCur&&curProjk)?`<option value="${esc(curProjk)}" selected>(current)</option>`:''}<option value="">— select project —</option>`+
+    (master.length?`<optgroup label="Official projects">${master.map(tag).join('')}</optgroup>`:'')+
+    (other.length?`<optgroup label="Other (from reports)">${other.map(tag).join('')}</optgroup>`:'');
+}
 function projTree(groups){                                      // Product Type -> Customer Project -> [project leaves]
   const types={};
   groups.forEach(g=>{
@@ -1653,7 +1665,9 @@ function editTaskField(id, field, val){
   const t=tasks.find(x=>x.id===id); if(!t) return;
   if(field==='progress') t.progress=Math.max(0,Math.min(100,+val||0));
   else if(field==='nextProgress') t.nextProgress=Math.max(0,Math.min(100,+val||0));
-  else if(field==='project'){ t.project=val; t.projk=projKeyOf(val); t.projectLabel=projLabelOf(val); }
+  else if(field==='project'){ const g=projectGroups().find(x=>x.projk===val);
+    if(g){ t.projk=g.projk; t.projectLabel=g.label; t.project=(projMeta[g.projk]||{}).code||g.label; }   // picked from dropdown
+    else { t.project=val; t.projk=projKeyOf(val); t.projectLabel=projLabelOf(val); } }                    // free-text fallback
   else t[field]=val;
   if(field==='progress'||field==='risk'||field==='complexity'||field==='nextProgress') t.manualEdit=true;  // survive re-import
   if(field==='current'||field==='next'||field==='analysis') t.manualText=true;      // keep user edits
@@ -1924,7 +1938,7 @@ function openTask(id){
         <label>Complexity<select data-edit="complexity" data-tid="${t.id}">${optTags(['Low','Medium','High'],t.complexity)}</select></label>
       </div>
       <div class="kv">
-        <span class="k">Project (editable)</span><span><input class="proj-edit" value="${esc(t.project)}" data-edit="project" data-tid="${t.id}"></span>
+        <span class="k">Project</span><span><select class="proj-edit" data-edit="project" data-tid="${t.id}">${projectOptionsHTML(t.projk)}</select></span>
         <span class="k">Status</span><span>${esc(statusLine(t))}</span>
         <span class="k">Due date</span><span>${esc(t.due||'—')}</span>
         <span class="k">Owner (raw)</span><span>${esc(t.rawOwner||'—')}</span>
@@ -2020,7 +2034,8 @@ function openWorkbench(preMemberId){
   } else { wbm.disabled=false; }
   $('#phraseRow').innerHTML=Object.keys(PHRASES).map(k=>`<button data-phrase="${esc(k)}">${esc(k)}</button>`).join('');
   wbImages=[]; renderWbThumbs();
-  ['#wbProject','#wbThisWeek','#wbIssue','#wbNext'].forEach(s=>$(s).value='');
+  $('#wbProject').innerHTML=projectOptionsHTML('');                 // project dropdown — known projects only (no free typing)
+  ['#wbThisWeek','#wbIssue','#wbNext'].forEach(s=>$(s).value='');
   $('#wbProgress').value=0; $('#wbNextProgress').value=0;
   $('#workbenchModal').hidden=false;
 }
@@ -2033,7 +2048,8 @@ function renderWbThumbs(){
 }
 function saveWorkbench(){
   const mid=$('#wbMember').value; if(!mid){ toast('Add a member first'); return; }
-  const project=$('#wbProject').value.trim()||'Untitled Project';
+  const pv=$('#wbProject').value; const pg=projectGroups().find(x=>x.projk===pv);
+  const project = pg ? ((projMeta[pg.projk]||{}).code||pg.label) : ((pv||'').trim()||'Untitled Project');
   const current=$('#wbThisWeek').value.trim();
   const name=memberName(mid);
   const p={project, reporter:name, rawOwner:name, current,
@@ -2745,6 +2761,9 @@ function wireEvents(){
   $('#exportPptxBtn').addEventListener('click', ()=>buildPptx(null));
   $('#ocrReportsBtn').addEventListener('click', ocrAllReports);
   $('#previewBtn').addEventListener('click', openNarrative);
+  { const b=$('#pptxPreviewBtn'); if(b) b.addEventListener('click', openPptxPreview); }
+  { const s=$('#pptxPrevMember'); if(s) s.addEventListener('change', renderPptxPreview); }
+  { const e=$('#pptxPrevExportBtn'); if(e) e.addEventListener('click', ()=>{ const mid=$('#pptxPrevMember').value; buildPptx(mid?[mid]:null); }); }
   $('#narrMember').addEventListener('change', renderNarrative);
   $('#narrCopyBtn').addEventListener('click', ()=>{ navigator.clipboard&&navigator.clipboard.writeText($('#narrativeText').textContent); toast('Narrative text copied'); });
   $('#narrExportBtn').addEventListener('click', ()=>{ const mid=$('#narrMember').value; exportWord(mid?[mid]:null); });
@@ -2883,6 +2902,33 @@ function openNarrative(){
 function renderNarrative(){
   const mid=$('#narrMember')?$('#narrMember').value:'';
   $('#narrativeText').textContent=buildNarrative(mid?[mid]:null);
+}
+// PPTX preview: one card per member (the deck's per-member slide content) before exporting
+function openPptxPreview(){
+  const sel=$('#pptxPrevMember'); if(sel) sel.innerHTML='<option value="">All members</option>'+members.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('');
+  renderPptxPreview(); $('#pptxPreviewModal').hidden=false;
+}
+function renderPptxPreview(){
+  const mid=$('#pptxPrevMember')?$('#pptxPrevMember').value:'';
+  $('#pptxPreviewBody').innerHTML=pptxPreviewHTML(mid?[mid]:null);
+}
+function pptxPreviewHTML(memberIds){
+  const {map,unassigned}=buildBuckets();
+  const targets = memberIds&&memberIds.length ? members.filter(m=>memberIds.includes(m.id)) : members.slice();
+  const slide=(name,role,list)=>{
+    const byP={}, order=[];
+    (list||[]).forEach(t=>{ const k=pptPlabel(t)||'—'; if(!byP[k]){ byP[k]={cur:[],next:[],imgs:0}; order.push(k); }
+      if((t.current||'').trim()) byP[k].cur.push({txt:t.current,p:t.progress});
+      if((t.next||'').trim()) byP[k].next.push({txt:t.next,p:(t.nextProgress!=null?t.nextProgress:null)});
+      byP[k].imgs+=(t.images||[]).length; });
+    const sec=(title,key)=>{ const ks=order.filter(k=>byP[k][key].length); if(!ks.length) return '';
+      return `<div class="pv-sec"><div class="pv-sectitle">${title}</div>${ks.map(k=>`<div class="pv-proj"><b>${esc(k)}</b>${byP[k][key].map(o=>`<div class="pv-line">${esc(String(o.txt||'').replace(/\s+/g,' ').slice(0,140))}${o.p!=null?` <span class="pv-pct">${o.p}%</span>`:''}</div>`).join('')}</div>`).join('')}</div>`; };
+    const totalImgs=order.reduce((s,k)=>s+byP[k].imgs,0);
+    return `<div class="pv-slide"><div class="pv-head"><span class="pv-name">${esc(name)}</span>${role?`<span class="pv-role">${esc(role)}</span>`:''}<span class="pv-meta">${(list||[]).length} task${(list||[]).length===1?'':'s'}${totalImgs?` · 📎 ${totalImgs}`:''}</span></div>${sec('THIS WEEK','cur')||'<div class="pv-empty">No this-week work</div>'}${sec('NEXT WEEK','next')}</div>`;
+  };
+  let html=targets.map(m=>slide(memberDisplay(m),[m.role,m.role2].filter(Boolean).join(' · '),map.get(m.id)||[])).join('');
+  if((!memberIds||!memberIds.length)&&unassigned.length) html+=slide('Unassigned','',unassigned);
+  return html||'<p class="hint">No members / tasks yet.</p>';
 }
 
 /* expose for testing */

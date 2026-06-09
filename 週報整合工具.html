@@ -626,6 +626,24 @@ label.check input{width:auto}
 #projEditModal .modal{max-width:780px}
 #projEditBody .proj-card{border:none;background:none;box-shadow:none;padding:0}
 #projEditBody .proj-card:hover{transform:none;box-shadow:none}
+/* Dashboard report-tools button row */
+.rt-actions{display:flex;flex-wrap:wrap;gap:9px}
+select.proj-edit{width:100%;min-width:210px}
+/* PPTX preview modal */
+.modal.wide{max-width:920px;width:94vw}
+.pptx-preview{display:flex;flex-direction:column;gap:14px;max-height:64vh;overflow:auto}
+.pv-slide{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.pv-head{display:flex;align-items:baseline;gap:10px;border-bottom:1px solid var(--line-soft);padding-bottom:8px;margin-bottom:9px}
+.pv-name{font-size:15px;font-weight:750;color:var(--text)}
+.pv-role{font-size:11.5px;color:var(--accent)}
+.pv-meta{margin-left:auto;font-size:11.5px;color:var(--muted)}
+.pv-sec{margin-top:8px}
+.pv-sectitle{font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--accent);text-transform:uppercase;margin-bottom:5px}
+.pv-proj{margin:0 0 7px 0}
+.pv-proj b{font-size:12.5px;color:#bcd6ff;font-family:ui-monospace,Menlo,Consolas,monospace}
+.pv-line{font-size:12.5px;color:var(--text);margin:2px 0 2px 10px;display:flex;gap:8px}
+.pv-pct{color:var(--accent);font-weight:700;margin-left:auto;flex:none}
+.pv-empty{color:var(--muted);font-size:12.5px;font-style:italic}
 
 </style>
 </head>
@@ -635,7 +653,7 @@ label.check input{width:auto}
   <div class="cg-box">
     <div class="cg-logo">📋</div>
     <h2>Weekly Report Hub</h2>
-    <div class="cg-ver">build 260609u</div>
+    <div class="cg-ver">build 260609v</div>
     <div id="cgPassWrap">
       <p class="cg-sub">Enter your team passcode to sign in</p>
       <input type="password" id="cgPass" placeholder="Team passcode" autocomplete="current-password">
@@ -658,20 +676,11 @@ label.check input{width:auto}
     </div>
   </div>
   <div class="top-actions">
-    <label class="btn primary admin-only">
-      ⬆ Import reports
-      <input type="file" id="reportInput" accept=".pptx,.docx,.xlsx,.txt,.csv" multiple hidden>
-    </label>
     <button class="btn" id="openWorkbenchBtn">✍ Workbench</button>
-    <button class="btn admin-only" id="ocrReportsBtn">🔍 OCR image reports</button>
-    <button class="btn" id="previewBtn">👁 Word preview</button>
-    <button class="btn admin-only" id="exportAllBtn">⬇ Export Word</button>
-    <button class="btn admin-only" id="exportPptxBtn">📊 Export PPTX</button>
-    <button class="btn danger admin-only" id="clearAllBtn" title="Clear all tasks &amp; images (member list kept)">🧹 Clear all</button>
   </div>
   <div class="session-info">
     <span class="cloud-info" id="cloudWho"></span>
-    <span class="build-badge" title="Currently loaded app build">b260609u</span>
+    <span class="build-badge" title="Currently loaded app build">b260609v</span>
     <button class="btn sm cloud-info" id="cloudLogout" hidden>Sign out</button>
   </div>
 </header>
@@ -685,6 +694,19 @@ label.check input{width:auto}
 
 <main class="main">
   <!-- ============ DASHBOARD ============ -->
+  <section class="panel admin-only" data-pane="dashboard">
+    <h2>🛠 Report tools</h2>
+    <div class="rt-actions">
+      <label class="btn primary">⬆ Import reports<input type="file" id="reportInput" accept=".pptx,.docx,.xlsx,.txt,.csv" multiple hidden></label>
+      <button class="btn" id="ocrReportsBtn">🔍 OCR image reports</button>
+      <button class="btn" id="previewBtn">👁 Word preview</button>
+      <button class="btn" id="pptxPreviewBtn">🖥 PPTX preview</button>
+      <button class="btn" id="exportAllBtn">⬇ Export Word</button>
+      <button class="btn" id="exportPptxBtn">📊 Export PPTX</button>
+      <button class="btn danger" id="clearAllBtn" title="Clear all tasks &amp; images (member list kept)">🧹 Clear all</button>
+    </div>
+  </section>
+
   <section class="panel admin-only" data-pane="dashboard">
     <h2>🔆 This week highlights</h2>
     <div id="dashHighlights" class="hl-grid"></div>
@@ -805,7 +827,7 @@ label.check input{width:auto}
           <select id="wbMember"></select>
         </label>
         <label>Project
-          <input id="wbProject" placeholder="e.g. Sensor Firmware v2.1">
+          <select id="wbProject"></select>
         </label>
         <label>Risk
           <select id="wbRisk"><option>Low</option><option>Medium</option><option>High</option></select>
@@ -863,6 +885,24 @@ label.check input{width:auto}
     <div class="modal-foot">
       <button class="btn" id="narrCopyBtn">📋 Copy text</button>
       <button class="btn primary" id="narrExportBtn">⬇ Export Word</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ PPTX PREVIEW MODAL ============ -->
+<div class="modal-overlay" id="pptxPreviewModal" hidden>
+  <div class="modal wide">
+    <div class="modal-head">
+      <h2>🖥 PPTX preview</h2>
+      <div class="head-actions">
+        <select id="pptxPrevMember"></select>
+        <button class="icon-btn" data-close>✕</button>
+      </div>
+    </div>
+    <div class="modal-body"><div id="pptxPreviewBody" class="pptx-preview"></div></div>
+    <div class="modal-foot">
+      <span class="hint">Preview of the deck content per member (not the exact slide pixels).</span>
+      <button class="btn primary" id="pptxPrevExportBtn">📊 Export PPTX</button>
     </div>
   </div>
 </div>
@@ -2454,6 +2494,18 @@ function projComponent(g){
   if(/T\d+\b/.test(code)) return 'Module';                      // ...T02 -> module
   return '';
 }
+// <option>s for a project picker (value = projk) — constrains entry to known projects (no more free-typed junk)
+function projectOptionsHTML(curProjk){
+  const all=projectGroups().map(g=>{ const m=projMeta[g.projk]||{}; const cp=m.custProj||projCustProj(g), comp=m.component||projComponent(g);
+    return {projk:g.projk, master:!!m.master, label:m.master? `${m.code||g.label}${cp?' · '+cp:''}${comp?' · '+comp:''}` : g.label}; });
+  const tag=o=>`<option value="${esc(o.projk)}" ${curProjk===o.projk?'selected':''}>${esc(o.label)}</option>`;
+  const master=all.filter(o=>o.master).sort((a,b)=>a.label.localeCompare(b.label));
+  const other=all.filter(o=>!o.master).sort((a,b)=>a.label.localeCompare(b.label));
+  const hasCur=all.some(o=>o.projk===curProjk);
+  return `${(!hasCur&&curProjk)?`<option value="${esc(curProjk)}" selected>(current)</option>`:''}<option value="">— select project —</option>`+
+    (master.length?`<optgroup label="Official projects">${master.map(tag).join('')}</optgroup>`:'')+
+    (other.length?`<optgroup label="Other (from reports)">${other.map(tag).join('')}</optgroup>`:'');
+}
 function projTree(groups){                                      // Product Type -> Customer Project -> [project leaves]
   const types={};
   groups.forEach(g=>{
@@ -2617,7 +2669,9 @@ function editTaskField(id, field, val){
   const t=tasks.find(x=>x.id===id); if(!t) return;
   if(field==='progress') t.progress=Math.max(0,Math.min(100,+val||0));
   else if(field==='nextProgress') t.nextProgress=Math.max(0,Math.min(100,+val||0));
-  else if(field==='project'){ t.project=val; t.projk=projKeyOf(val); t.projectLabel=projLabelOf(val); }
+  else if(field==='project'){ const g=projectGroups().find(x=>x.projk===val);
+    if(g){ t.projk=g.projk; t.projectLabel=g.label; t.project=(projMeta[g.projk]||{}).code||g.label; }   // picked from dropdown
+    else { t.project=val; t.projk=projKeyOf(val); t.projectLabel=projLabelOf(val); } }                    // free-text fallback
   else t[field]=val;
   if(field==='progress'||field==='risk'||field==='complexity'||field==='nextProgress') t.manualEdit=true;  // survive re-import
   if(field==='current'||field==='next'||field==='analysis') t.manualText=true;      // keep user edits
@@ -2888,7 +2942,7 @@ function openTask(id){
         <label>Complexity<select data-edit="complexity" data-tid="${t.id}">${optTags(['Low','Medium','High'],t.complexity)}</select></label>
       </div>
       <div class="kv">
-        <span class="k">Project (editable)</span><span><input class="proj-edit" value="${esc(t.project)}" data-edit="project" data-tid="${t.id}"></span>
+        <span class="k">Project</span><span><select class="proj-edit" data-edit="project" data-tid="${t.id}">${projectOptionsHTML(t.projk)}</select></span>
         <span class="k">Status</span><span>${esc(statusLine(t))}</span>
         <span class="k">Due date</span><span>${esc(t.due||'—')}</span>
         <span class="k">Owner (raw)</span><span>${esc(t.rawOwner||'—')}</span>
@@ -2984,7 +3038,8 @@ function openWorkbench(preMemberId){
   } else { wbm.disabled=false; }
   $('#phraseRow').innerHTML=Object.keys(PHRASES).map(k=>`<button data-phrase="${esc(k)}">${esc(k)}</button>`).join('');
   wbImages=[]; renderWbThumbs();
-  ['#wbProject','#wbThisWeek','#wbIssue','#wbNext'].forEach(s=>$(s).value='');
+  $('#wbProject').innerHTML=projectOptionsHTML('');                 // project dropdown — known projects only (no free typing)
+  ['#wbThisWeek','#wbIssue','#wbNext'].forEach(s=>$(s).value='');
   $('#wbProgress').value=0; $('#wbNextProgress').value=0;
   $('#workbenchModal').hidden=false;
 }
@@ -2997,7 +3052,8 @@ function renderWbThumbs(){
 }
 function saveWorkbench(){
   const mid=$('#wbMember').value; if(!mid){ toast('Add a member first'); return; }
-  const project=$('#wbProject').value.trim()||'Untitled Project';
+  const pv=$('#wbProject').value; const pg=projectGroups().find(x=>x.projk===pv);
+  const project = pg ? ((projMeta[pg.projk]||{}).code||pg.label) : ((pv||'').trim()||'Untitled Project');
   const current=$('#wbThisWeek').value.trim();
   const name=memberName(mid);
   const p={project, reporter:name, rawOwner:name, current,
@@ -3709,6 +3765,9 @@ function wireEvents(){
   $('#exportPptxBtn').addEventListener('click', ()=>buildPptx(null));
   $('#ocrReportsBtn').addEventListener('click', ocrAllReports);
   $('#previewBtn').addEventListener('click', openNarrative);
+  { const b=$('#pptxPreviewBtn'); if(b) b.addEventListener('click', openPptxPreview); }
+  { const s=$('#pptxPrevMember'); if(s) s.addEventListener('change', renderPptxPreview); }
+  { const e=$('#pptxPrevExportBtn'); if(e) e.addEventListener('click', ()=>{ const mid=$('#pptxPrevMember').value; buildPptx(mid?[mid]:null); }); }
   $('#narrMember').addEventListener('change', renderNarrative);
   $('#narrCopyBtn').addEventListener('click', ()=>{ navigator.clipboard&&navigator.clipboard.writeText($('#narrativeText').textContent); toast('Narrative text copied'); });
   $('#narrExportBtn').addEventListener('click', ()=>{ const mid=$('#narrMember').value; exportWord(mid?[mid]:null); });
@@ -3847,6 +3906,33 @@ function openNarrative(){
 function renderNarrative(){
   const mid=$('#narrMember')?$('#narrMember').value:'';
   $('#narrativeText').textContent=buildNarrative(mid?[mid]:null);
+}
+// PPTX preview: one card per member (the deck's per-member slide content) before exporting
+function openPptxPreview(){
+  const sel=$('#pptxPrevMember'); if(sel) sel.innerHTML='<option value="">All members</option>'+members.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('');
+  renderPptxPreview(); $('#pptxPreviewModal').hidden=false;
+}
+function renderPptxPreview(){
+  const mid=$('#pptxPrevMember')?$('#pptxPrevMember').value:'';
+  $('#pptxPreviewBody').innerHTML=pptxPreviewHTML(mid?[mid]:null);
+}
+function pptxPreviewHTML(memberIds){
+  const {map,unassigned}=buildBuckets();
+  const targets = memberIds&&memberIds.length ? members.filter(m=>memberIds.includes(m.id)) : members.slice();
+  const slide=(name,role,list)=>{
+    const byP={}, order=[];
+    (list||[]).forEach(t=>{ const k=pptPlabel(t)||'—'; if(!byP[k]){ byP[k]={cur:[],next:[],imgs:0}; order.push(k); }
+      if((t.current||'').trim()) byP[k].cur.push({txt:t.current,p:t.progress});
+      if((t.next||'').trim()) byP[k].next.push({txt:t.next,p:(t.nextProgress!=null?t.nextProgress:null)});
+      byP[k].imgs+=(t.images||[]).length; });
+    const sec=(title,key)=>{ const ks=order.filter(k=>byP[k][key].length); if(!ks.length) return '';
+      return `<div class="pv-sec"><div class="pv-sectitle">${title}</div>${ks.map(k=>`<div class="pv-proj"><b>${esc(k)}</b>${byP[k][key].map(o=>`<div class="pv-line">${esc(String(o.txt||'').replace(/\s+/g,' ').slice(0,140))}${o.p!=null?` <span class="pv-pct">${o.p}%</span>`:''}</div>`).join('')}</div>`).join('')}</div>`; };
+    const totalImgs=order.reduce((s,k)=>s+byP[k].imgs,0);
+    return `<div class="pv-slide"><div class="pv-head"><span class="pv-name">${esc(name)}</span>${role?`<span class="pv-role">${esc(role)}</span>`:''}<span class="pv-meta">${(list||[]).length} task${(list||[]).length===1?'':'s'}${totalImgs?` · 📎 ${totalImgs}`:''}</span></div>${sec('THIS WEEK','cur')||'<div class="pv-empty">No this-week work</div>'}${sec('NEXT WEEK','next')}</div>`;
+  };
+  let html=targets.map(m=>slide(memberDisplay(m),[m.role,m.role2].filter(Boolean).join(' · '),map.get(m.id)||[])).join('');
+  if((!memberIds||!memberIds.length)&&unassigned.length) html+=slide('Unassigned','',unassigned);
+  return html||'<p class="hint">No members / tasks yet.</p>';
 }
 
 /* expose for testing */
