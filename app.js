@@ -1448,11 +1448,32 @@ function renderCatalog(){
   const views=[['tree','🌳 Tree'],['matrix','▦ Matrix']];
   const bar=`<div class="cat-viewtabs">
       ${views.map(([v,l])=>`<button class="cv-tab ${catalogView===v?'active':''}" data-catview="${v}">${l}</button>`).join('')}
-      <span class="cv-hint">Click ✎ on any project to edit · paste the full matrix to refresh grouping.</span>
+      <span class="cv-hint">✎ edit · ＋ add a task · drag a task chip onto a model card to move it.</span>
     </div>`;
   if(!groups.length){ cont.innerHTML=bar+`<p class="hint">No projects yet — import reports, or use "＋ Add project / 📋 Paste project list" above.</p>`; return; }
   if(catalogView==='matrix'){ cont.innerHTML=bar+renderMatrixHTML(groups); return; }
   cont.innerHTML=bar+renderTreeHTML(groups);                  // default: Tree
+  wireTreeTaskDrag();
+}
+/* tree: drag a task chip onto a model card to move the task into that project */
+let _dragTaskId=null;
+function wireTreeTaskDrag(){
+  const cont=$('#projectCatalog'); if(!cont) return;
+  cont.querySelectorAll('.ptree-task[draggable]').forEach(ch=>{
+    ch.addEventListener('dragstart',e=>{ _dragTaskId=ch.dataset.opentask; try{ e.dataTransfer.setData('text/plain',_dragTaskId); }catch(err){} ch.classList.add('dragging'); });
+    ch.addEventListener('dragend',()=>{ _dragTaskId=null; ch.classList.remove('dragging'); });
+  });
+  cont.querySelectorAll('.ptree-leaf').forEach(leaf=>{
+    leaf.addEventListener('dragover',e=>{ if(_dragTaskId){ e.preventDefault(); leaf.classList.add('drop-target'); } });
+    leaf.addEventListener('dragleave',()=>leaf.classList.remove('drop-target'));
+    leaf.addEventListener('drop',e=>{ e.preventDefault(); leaf.classList.remove('drop-target');
+      if(!_dragTaskId) return;
+      const projk=leaf.dataset.editProj, code=(projMeta[projk]||{}).code||'project';
+      editTaskField(_dragTaskId,'project',projk);
+      toast('Task moved to '+code);
+      _dragTaskId=null;
+    });
+  });
 }
 function renderCatalogCardsHTML(groups){
   const byCat={}; groups.forEach(g=>{ const c=projCategory(g); (byCat[c]=byCat[c]||[]).push(g); });
@@ -1538,6 +1559,7 @@ function renderMatrixHTML(groups){
           <td class="pm-chip">${esc(m.chipset||'—')}</td>
           <td class="pm-tasks">${g.tasks.length||'·'}</td>
           <td class="pm-act">
+            <button class="btn xs" data-addtaskproj="${esc(g.projk)}" title="Add a task to this project">＋</button>
             <button class="btn xs" data-sched="${esc(g.projk)}" title="Schedule timeline">📅</button>
             <button class="btn xs" data-edit-proj="${esc(g.projk)}" title="Edit details">✎</button>
             <button class="btn xs danger" data-delproj="${esc(g.projk)}" title="Delete project">🗑</button>
@@ -1558,7 +1580,7 @@ function renderTreeHTML(groups){
     if(cp)(tasksByCp[cp]=tasksByCp[cp]||[]).push(...g.tasks); else noCp.push(...g.tasks); });
   const usedCp={}, CAP=6;
   const taskChip=t=>{ const txt=(t.current||t.next||'(no description)').replace(/\s+/g,' ').trim().slice(0,48);
-    return `<button class="ptree-task st-${esc(t.status||'')}" data-opentask="${esc(t.id)}" title="Open task"><span class="ptt-dot"></span><span class="ptt-txt">${esc(txt)}</span></button>`; };
+    return `<button class="ptree-task st-${esc(t.status||'')}" draggable="true" data-opentask="${esc(t.id)}" title="Open task · drag onto a model card to move it"><span class="ptt-dot"></span><span class="ptt-txt">${esc(txt)}</span></button>`; };
   const taskBranch=(cp,ts)=>{ if(!ts||!ts.length) return '';
     const exp=treeExpand[cp], list=exp?ts:ts.slice(0,CAP);
     const chips=list.map(taskChip).join('');
@@ -1572,11 +1594,14 @@ function renderTreeHTML(groups){
       const grp=block.map[key];
       const leaves=grp.items.map(g=>{
         const m=projMeta[g.projk]||{};
-        return `<button class="ptree-leaf" data-edit-proj="${esc(g.projk)}" title="Edit ${esc(m.code||g.label)}">
-          <span class="ptl-comp">${esc(projComponent(g)||'Model')}</span>
-          <span class="ptl-code">${esc(m.code||g.label)}</span>
-          ${m.chipset?`<span class="ptl-chip">${esc(m.chipset)}</span>`:''}
-        </button>`;
+        return `<div class="ptree-leafrow">
+          <button class="ptree-leaf" data-edit-proj="${esc(g.projk)}" title="Edit ${esc(m.code||g.label)} · drop a task here to move it">
+            <span class="ptl-comp">${esc(projComponent(g)||'Model')}</span>
+            <span class="ptl-code">${esc(m.code||g.label)}</span>
+            ${m.chipset?`<span class="ptl-chip">${esc(m.chipset)}</span>`:''}
+          </button>
+          <button class="ptree-addtask" data-addtaskproj="${esc(g.projk)}" title="Add a task to ${esc(m.code||g.label)}">＋</button>
+        </div>`;
       }).join('');
       const cp=grp.cp; let branch=''; if(cp && !usedCp[cp]){ usedCp[cp]=1; branch=taskBranch(cp, tasksByCp[cp]); }
       html+=`<div class="ptree-row">
@@ -1972,22 +1997,41 @@ function openTask(id){
   loadTaskImages(t);   // decode attachments OFF the main thread (img.decode), then insert — open is instant & the NEXT open never blocks
 }
 // decode each base64 attachment off-thread, then append the already-decoded image (cheap paint, no main-thread stall)
+const _thumbCache={};                                    // image id -> small dataURL; the modal shows THUMBS (full image only in the lightbox)
+function thumbFor(im, cb){
+  if(!im||!im.data){ cb(''); return; }
+  if(_thumbCache[im.id]){ cb(_thumbCache[im.id]); return; }
+  const img=new Image(); let done=false;
+  const fin=src=>{ if(done) return; done=true; cb(src); };
+  img.onload=()=>{ try{
+      const MAX=240, w=img.naturalWidth||im.w||MAX, h=img.naturalHeight||im.h||MAX, r=Math.min(1, MAX/Math.max(w,h));
+      if(r>=1){ _thumbCache[im.id]=im.data; fin(im.data); return; }   // already small
+      const c=document.createElement('canvas'); c.width=Math.max(1,Math.round(w*r)); c.height=Math.max(1,Math.round(h*r));
+      c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+      const th=c.toDataURL('image/jpeg',.72); _thumbCache[im.id]=th; fin(th);
+    }catch(e){ fin(im.data); } };
+  img.onerror=()=>fin(im.data);
+  img.src=im.data;
+  setTimeout(()=>fin(im.data), 1500);                    // fallback: show the full image rather than nothing
+}
 function loadTaskImages(t){
   const box=$('#taskImgsBox'); if(!box) return; const add=box.querySelector('.img-add');
   (t.images||[]).forEach(im=>{
-    const img=new Image(); img.decoding='async'; img.setAttribute('data-light', im.id);
-    if(im.w&&im.h){ img.width=im.w; img.height=im.h; }
-    let done=false, tid=0;
-    const finish=()=>{ if(done) return; done=true; if(tid){ clearTimeout(tid); tid=0; }
-      if(_openTaskId!==t.id || !box.isConnected || !box.contains(add)) return;
-      const span=document.createElement('span'); span.className='img-edit'; span.appendChild(img);
+    thumbFor(im, src=>{
+      if(_openTaskId!==t.id || !box.isConnected || !box.contains(add) || !src) return;
+      const span=document.createElement('span'); span.className='img-edit';
+      const img=new Image(); img.decoding='async'; img.setAttribute('data-light', im.id); img.src=src;
+      span.appendChild(img);
       const del=document.createElement('button'); del.className='img-del';
       del.setAttribute('data-delimg', t.id+'|'+im.id); del.title='Delete this image'; del.textContent='✕';
-      span.appendChild(del); box.insertBefore(span, add); };
-    img.src=im.data;
-    if(img.decode) img.decode().then(finish, finish); else { img.onload=finish; img.onerror=finish; }
-    tid=setTimeout(finish, 2500);                        // safety net, cleared once decode settles so it never pins memory
+      span.appendChild(del); box.insertBefore(span, add);
+    });
   });
+}
+function imageDataById(id){                              // lightbox needs the FULL image for a thumb's id
+  for(const t of tasks) for(const im of (t.images||[])) if(im&&im.id===id) return im.data;
+  for(const k in projMeta) for(const im of ((projMeta[k]||{}).images||[])) if(im&&im.id===id) return im.data;
+  return null;
 }
 
 /* ---------- project drill-down: all tasks under a project ---------- */
@@ -2042,7 +2086,7 @@ function applyProjAliases(text){
    WORKBENCH
    ===================================================================== */
 let wbImages=[];
-function openWorkbench(preMemberId){
+function openWorkbench(preMemberId, preProjk){
   renderWorkbenchSelect();
   if(preMemberId && members.some(m=>m.id===preMemberId)) $('#wbMember').value=preMemberId;
   // members can only file under their own name
@@ -2053,7 +2097,7 @@ function openWorkbench(preMemberId){
   } else { wbm.disabled=false; }
   $('#phraseRow').innerHTML=Object.keys(PHRASES).map(k=>`<button data-phrase="${esc(k)}">${esc(k)}</button>`).join('');
   wbImages=[]; renderWbThumbs();
-  $('#wbProject').innerHTML=projectOptionsHTML('');                 // project dropdown — known projects only (no free typing)
+  $('#wbProject').innerHTML=projectOptionsHTML(preProjk||'');       // project dropdown — known projects only; ＋ on a project pre-selects it
   ['#wbThisWeek','#wbIssue','#wbNext'].forEach(s=>$(s).value='');
   $('#wbProgress').value=0; $('#wbNextProgress').value=0;
   $('#workbenchModal').hidden=false;
@@ -2798,7 +2842,8 @@ function wireEvents(){
   // delegated clicks
   document.body.addEventListener('click', e=>{
     const t=e.target;
-    if(t.closest('[data-close]')){ t.closest('.modal-overlay').hidden=true; return; }
+    if(t.closest('[data-close]')){ const ov=t.closest('.modal-overlay'); if(ov){ ov.hidden=true;
+      if(ov.id==='taskModal'){ _openTaskId=null; const b=$('#taskImgsBox'); if(b) b.querySelectorAll('.img-edit').forEach(s=>{ const im=s.querySelector('img'); if(im) im.src=''; s.remove(); }); } } return; }
     if(t.closest('[data-designdocs]')){ openDesignDocs(); return; }
     { const vt=t.closest('#viewTabs .vt'); if(vt){ setView(vt.dataset.view); renderStats(); return; } }
     const navCard=t.closest('[data-nav]'); if(navCard){ navStat(navCard.dataset.nav, navCard.dataset.flt); return; }
@@ -2809,7 +2854,7 @@ function wireEvents(){
     if(t.dataset.phrase){ const ta=$('#wbThisWeek'); ta.value=(ta.value?ta.value+' ':'')+PHRASES[t.dataset.phrase]; return; }
     if(t.dataset.clearimg){ clearTaskImages(t.dataset.clearimg); return; }
     if(t.dataset.delimg){ const [tid,imgId]=t.dataset.delimg.split('|'); removeTaskImage(tid,imgId); return; }
-    if(t.dataset.light){ openLight(t.getAttribute('src')); return; }
+    if(t.dataset.light){ openLight(imageDataById(t.dataset.light)||t.getAttribute('src')); return; }
     if(t.dataset.exportMember!==undefined){ if(t.dataset.exportMember) exportWord([t.dataset.exportMember]); else toast('This task has no matching member'); return; }
     // ----- catalog editing -----
     { const cv=t.closest('[data-catview]'); if(cv){ catalogView=cv.dataset.catview; store.save('wrt_catview',catalogView); renderCatalog(); return; } }
@@ -2837,6 +2882,7 @@ function wireEvents(){
     if(t.dataset.rmowner!==undefined){ const [tid,mid]=t.dataset.rmowner.split('|'); removeTaskOwner(tid,mid); return; }
     if(t.dataset.ocr!==undefined){ ocrTask(t.dataset.ocr); return; }
     if(t.dataset.opentask!==undefined){ openTask(t.dataset.opentask); return; }
+    { const ap=t.closest('[data-addtaskproj]'); if(ap){ openWorkbench(null, ap.dataset.addtaskproj); return; } }
     if(t.dataset.addtask!==undefined){ openWorkbench(t.dataset.addtask); return; }
     if(t.closest('.ctask-ctl')) return;   // don't let control clicks fall through to task-open
     const projRow=t.closest('[data-proj]'); if(projRow){ openProject(projRow.dataset.proj); return; }
