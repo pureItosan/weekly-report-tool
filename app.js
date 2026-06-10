@@ -2870,8 +2870,8 @@ function wireEvents(){
     // ----- catalog editing -----
     { const cv=t.closest('[data-catview]'); if(cv){ catalogView=cv.dataset.catview; store.save('wrt_catview',catalogView); renderCatalog(); return; } }
     { const te=t.closest('[data-treeexp]'); if(te){ const c=te.dataset.treeexp; treeExpand[c]=!treeExpand[c]; renderCatalog(); return; } }
-    if(t.dataset.editProj!==undefined){ const mo=$('#projEditModal');
-      if(mo && !mo.hidden && editingProj===t.dataset.editProj) closeProjEdit(); else openProjEdit(t.dataset.editProj); return; }
+    { const ep=t.closest('[data-edit-proj]'); if(ep){ const mo=$('#projEditModal');
+      if(mo && !mo.hidden && editingProj===ep.dataset.editProj) closeProjEdit(); else openProjEdit(ep.dataset.editProj); return; } }
     if(t.dataset.saveProj!==undefined){ saveProjMeta(t.dataset.saveProj, t.closest('.proj-card')); return; }
     if(t.dataset.unmerge!==undefined){ unmergeProject(t.dataset.unmerge); return; }
     if(t.dataset.delproj!==undefined){ deleteProjectGroup(t.dataset.delproj); return; }
@@ -2892,7 +2892,7 @@ function wireEvents(){
     { const cf=t.closest('[data-catfilter]'); if(cf){ catFilter=cf.dataset.catfilter; renderCatalog(); return; } }
     if(t.dataset.rmowner!==undefined){ const [tid,mid]=t.dataset.rmowner.split('|'); removeTaskOwner(tid,mid); return; }
     if(t.dataset.ocr!==undefined){ ocrTask(t.dataset.ocr); return; }
-    if(t.dataset.opentask!==undefined){ openTask(t.dataset.opentask); return; }
+    { const ot=t.closest('[data-opentask]'); if(ot){ openTask(ot.dataset.opentask); return; } }   // closest(): clicking the TEXT inside the chip must work too
     { const ap=t.closest('[data-addtaskproj]'); if(ap){ openWorkbench(null, ap.dataset.addtaskproj); return; } }
     if(t.dataset.addtask!==undefined){ openWorkbench(t.dataset.addtask); return; }
     if(t.closest('.ctask-ctl')) return;   // don't let control clicks fall through to task-open
