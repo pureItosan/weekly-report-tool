@@ -1377,19 +1377,30 @@ let _ddProjk=null;
 function openDesignDocs(){ _ddProjk=null; renderDesignDocs(); $('#projImgModal').hidden=false; }
 function renderDesignDocs(){
   if(_ddProjk){ renderDesignDocsProject(); return; }
-  // LEVEL 1 — a card per project; click to open that project's design documents
-  const groups=projectGroups();
-  const cards=groups.map(g=>{ const m=projMeta[g.projk]||{}, imgs=m.images||[], thumb=imgs[0];
+  // LEVEL 1 — same official projects as Tree/Matrix (grouped by Product Type, same labels);
+  // non-master groups only appear if they already hold documents (so nothing gets orphaned).
+  const all=projectGroups();
+  const masters=all.filter(g=>(projMeta[g.projk]||{}).master);
+  const others=all.filter(g=>!(projMeta[g.projk]||{}).master && ((projMeta[g.projk]||{}).images||[]).length);
+  const card=g=>{ const m=projMeta[g.projk]||{}, imgs=m.images||[], thumb=imgs[0];
+    const cp=m.custProj||projCustProj(g), comp=m.component||projComponent(g);
     return `<div class="dd-card" data-ddopen="${esc(g.projk)}">
-      <div class="dd-thumb">${thumb?`<img src="${thumb.data}">`:'<span class="dd-noimg">📐</span>'}</div>
+      <div class="dd-thumb">${thumb?`<img src="${thumb.data}" loading="lazy" decoding="async">`:'<span class="dd-noimg">📐</span>'}</div>
       <div class="dd-cardbody"><div class="dd-cardtitle">${esc(m.code||g.label)}</div>
-        <div class="dd-cardsub"><span class="cat-name cat-${esc(projCategory(g))}">${esc(projCategory(g))}</span> · ${imgs.length} docs</div></div></div>`;
-  }).join('');
+        <div class="dd-cardsub">${esc([cp,comp].filter(Boolean).join(' · ')||projCategory(g))} · ${imgs.length} doc${imgs.length===1?'':'s'}</div></div></div>`;
+  };
+  const types=projTree(masters);
+  let secs='';
+  projTypeOrder(types).forEach(ty=>{ const block=types[ty];
+    const items=[]; block.order.forEach(k=>items.push(...block.map[k].items));
+    secs+=`<div class="ptree-type" style="margin:14px 0 8px">${esc(ty)}</div><div class="dd-cards">${items.map(card).join('')}</div>`;
+  });
+  if(others.length) secs+=`<div class="ptree-type" style="margin:14px 0 8px">Other (from reports)</div><div class="dd-cards">${others.map(card).join('')}</div>`;
   $('#projImgInner').innerHTML=`
     <div class="modal-head"><h2>📐 Design Documents</h2><button class="icon-btn" data-close>✕</button></div>
     <div class="modal-body">
       <p class="hint">Open a project to upload / view its design documents (block diagram, GPIO table, architecture, schematic…).</p>
-      <div class="dd-cards">${cards||'<p class="hint">No projects yet — create some in the catalog first.</p>'}</div>
+      ${secs||'<p class="hint">No projects yet — create some in the catalog first.</p>'}
     </div>
     <div class="modal-foot"><button class="btn" data-close>Close</button></div>`;
 }
@@ -2346,11 +2357,18 @@ function assemblePptx(memberIds){
     const topBar=0.06, pad=Math.min(0.15, w*0.05), capH=Math.min(0.30, Math.max(0.20, h*0.12));
     s.addShape(RR,{x,y,w,h,rectRadius:0.05,fill:{color:PPT.white},line:{color:PPT.line,width:1}});
     s.addShape(R,{x,y,w,h:topBar,fill:{color:PPT.cyan}});
-    const iw=w-2*pad, ih=h-topBar-pad-capH;
-    try{ s.addImage({data:im.data,x:x+pad,y:y+topBar+pad*0.5,w:iw,h:ih,sizing:{type:'contain',w:iw,h:ih}}); }catch(e){}
+    const aw=w-2*pad, ah=h-topBar-pad-capH;
+    try{
+      if(im.w&&im.h){                                   // exact contain math from the ORIGINAL dims — ratio always locked
+        const r=im.w/im.h; let dw=Math.min(aw, ah*r), dh=dw/r;
+        s.addImage({data:im.data, x:x+pad+(aw-dw)/2, y:y+topBar+pad*0.5+(ah-dh)/2, w:dw, h:dh});
+      } else {
+        s.addImage({data:im.data,x:x+pad,y:y+topBar+pad*0.5,w:aw,h:ah,sizing:{type:'contain',w:aw,h:ah}});
+      }
+    }catch(e){}
     const fs=Math.max(8, Math.min(11, Math.round(h*3.6)));
     const cap='Fig '+n+(im._lbl? '  ·  '+String(im._lbl).slice(0,24) : '');
-    s.addText(cap,{x:x+pad,y:y+h-capH,w:iw,h:capH-0.02,fontSize:fs,color:PPT.gray,fontFace:PPT.font,valign:'middle'});
+    s.addText(cap,{x:x+pad,y:y+h-capH,w:aw,h:capH-0.02,fontSize:fs,color:PPT.gray,fontFace:PPT.font,valign:'middle'});
   }
   // a member's images → ADAPTIVE grid per slide, sized by image count + aspect ratio.
   // chooseGrid maximises how big the images render while keeping every cell above a legible
