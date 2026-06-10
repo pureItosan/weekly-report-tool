@@ -700,7 +700,7 @@ select.proj-edit{width:100%;min-width:210px}
   <div class="cg-box">
     <div class="cg-logo">📋</div>
     <h2>Weekly Report Hub</h2>
-    <div class="cg-ver">build 260609zs</div>
+    <div class="cg-ver">build 260609zt</div>
     <div id="cgPassWrap">
       <p class="cg-sub">Enter your team passcode to sign in</p>
       <input type="password" id="cgPass" placeholder="Team passcode" autocomplete="current-password">
@@ -727,7 +727,7 @@ select.proj-edit{width:100%;min-width:210px}
   </div>
   <div class="session-info">
     <span class="cloud-info" id="cloudWho"></span>
-    <span class="build-badge" title="Currently loaded app build">b260609zs</span>
+    <span class="build-badge" title="Currently loaded app build">b260609zt</span>
     <button class="btn sm cloud-info" id="cloudLogout" hidden>Sign out</button>
   </div>
 </header>
@@ -3447,7 +3447,7 @@ function assemblePptx(memberIds){
   function attachPages(name, role, imgs){
     if(!imgs||!imgs.length) return;
     const X0=0.7, Y0=1.98, W=11.93, H=4.95, GAP=0.18, CAPH=0.30;
-    const MINW=2.5, MINH=1.45, MAXPP=2;                 // at most 2 imgs/slide; ratio is NEVER distorted (contain) — if 2 won't fit at true ratio, drop to 1 + new page
+    const MINW=2.5, MINH=1.45, MAXPP=1;                 // ONE image per slide (dense measurement shots stay readable); ratio is never distorted
     let i=0, page=0;
     while(i<imgs.length){
       let take=Math.min(MAXPP, imgs.length-i), grid=null;
