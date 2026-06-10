@@ -2106,13 +2106,13 @@ function applyProjAliases(text){
 let wbImages=[];
 function openWorkbench(preMemberId, preProjk){
   renderWorkbenchSelect();
-  if(preMemberId && members.some(m=>m.id===preMemberId)) $('#wbMember').value=preMemberId;
-  // members can only file under their own name
   const wbm=$('#wbMember');
+  if(preMemberId && members.some(m=>m.id===preMemberId)){ const c=wbm.querySelector(`[data-wbm="${preMemberId}"]`); if(c) c.classList.add('on'); }
+  // members can only file under their own name
   if(CLOUD.me && !CLOUD.me.admin){
     const me=members.find(x=>x.name.toLowerCase()===CLOUD.me.name.toLowerCase());
-    if(me){ wbm.value=me.id; } wbm.disabled=true;
-  } else { wbm.disabled=false; }
+    wbm.querySelectorAll('.wbm').forEach(c=>{ const mine=!!me&&c.dataset.wbm===me.id; c.classList.toggle('on',mine); c.disabled=!mine; });
+  }
   $('#phraseRow').innerHTML=Object.keys(PHRASES).map(k=>`<button data-phrase="${esc(k)}">${esc(k)}</button>`).join('');
   wbImages=[]; renderWbThumbs();
   $('#wbProject').innerHTML=projectOptionsHTML(preProjk||'');       // project dropdown — known projects only; ＋ on a project pre-selects it
@@ -2121,19 +2121,20 @@ function openWorkbench(preMemberId, preProjk){
   $('#workbenchModal').hidden=false;
 }
 function renderWorkbenchSelect(){
-  const sel=$('#wbMember'); if(!sel) return;
-  sel.innerHTML=members.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('')||'<option value="">(add members first)</option>';
+  const box=$('#wbMember'); if(!box) return;   // multi-select chips: click to toggle each member
+  box.innerHTML=members.map(m=>`<button type="button" class="wbm" data-wbm="${m.id}">${esc(m.name)}</button>`).join('')||'<span class="hint">(add members first)</span>';
 }
 function renderWbThumbs(){
   $('#wbThumbs').innerHTML=wbImages.map((im,i)=>`<div class="th"><img src="${im.data}" data-light="${im.id}"><button class="rm" data-rm-wb="${i}">✕</button></div>`).join('');
 }
 function saveWorkbench(){
-  const mid=$('#wbMember').value; if(!mid){ toast('Add a member first'); return; }
+  const ids=[...document.querySelectorAll('#wbMember .wbm.on')].map(b=>b.dataset.wbm);
+  if(!ids.length){ toast('Pick at least one member'); return; }
   const pv=$('#wbProject').value; const pg=projectGroups().find(x=>x.projk===pv);
   const project = pg ? ((projMeta[pg.projk]||{}).code||pg.label) : ((pv||'').trim()||'Untitled Project');
   const current=$('#wbThisWeek').value.trim();
-  const name=memberName(mid);
-  const p={project, reporter:name, rawOwner:name, current,
+  const names=ids.map(memberName), name=names.join(', ');
+  const p={project, reporter:names[0], rawOwner:name, current,
     next:$('#wbNext').value.trim(), risk:$('#wbRisk').value, due:$('#wbDue').value,
     complexity:$('#wbComplexity').value, progress:+$('#wbProgress').value||0,
     nextProgress:+$('#wbNextProgress').value||0,
@@ -2932,6 +2933,7 @@ function wireEvents(){
     if(t.dataset.rmowner!==undefined){ const [tid,mid]=t.dataset.rmowner.split('|'); removeTaskOwner(tid,mid); return; }
     if(t.dataset.ocr!==undefined){ ocrTask(t.dataset.ocr); return; }
     { const ot=t.closest('[data-opentask]'); if(ot){ openTask(ot.dataset.opentask); return; } }   // closest(): clicking the TEXT inside the chip must work too
+    { const wb=t.closest('.wbm'); if(wb){ if(!wb.disabled) wb.classList.toggle('on'); return; } }
     { const ap=t.closest('[data-addtaskproj]'); if(ap){ openWorkbench(null, ap.dataset.addtaskproj); return; } }
     if(t.dataset.addtask!==undefined){ openWorkbench(t.dataset.addtask); return; }
     if(t.closest('.ctask-ctl')) return;   // don't let control clicks fall through to task-open

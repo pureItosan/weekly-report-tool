@@ -593,6 +593,13 @@ label.check input{width:auto}
 .ptree-leafexp{flex:none;align-self:center;min-width:48px;height:34px;padding:0 10px;border:1px solid var(--line-2);background:var(--surface-2);color:var(--accent);border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;transition:border-color .15s}
 .ptree-leafexp:hover{border-color:var(--accent)}
 .ptree-leaftasks{margin-left:26px;padding:2px 0 4px 12px;border-left:2px dashed var(--line-2);display:flex;flex-direction:column;gap:6px}
+/* workbench: multi-select member chips */
+.lbl-hint{font-weight:400;color:var(--muted);font-size:12px}
+.wb-members{display:flex;flex-wrap:wrap;gap:6px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px;max-height:128px;overflow:auto}
+.wbm{border:1px solid var(--line-2);background:var(--surface-2);color:var(--muted);border-radius:20px;padding:4px 12px;font-size:13px;cursor:pointer;transition:border-color .12s,color .12s,background .12s;font-family:inherit}
+.wbm:hover{border-color:var(--accent);color:var(--text)}
+.wbm.on{background:linear-gradient(180deg,#2a4a7a,#1d355c);border-color:var(--accent);color:#fff;font-weight:650}
+.wbm:disabled{opacity:.35;cursor:not-allowed}
 .ptree-leaf:hover{border-color:var(--accent);transform:translateX(3px);box-shadow:0 6px 20px -10px rgba(90,162,255,.5)}
 .ptl-comp{font-size:12px;color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
 .ptl-code{font-size:15px;font-weight:700;font-family:ui-monospace,Menlo,Consolas,monospace;color:#dce9ff}
@@ -667,7 +674,7 @@ select.proj-edit{width:100%;min-width:210px}
   <div class="cg-box">
     <div class="cg-logo">📋</div>
     <h2>Weekly Report Hub</h2>
-    <div class="cg-ver">build 260609zm</div>
+    <div class="cg-ver">build 260609zn</div>
     <div id="cgPassWrap">
       <p class="cg-sub">Enter your team passcode to sign in</p>
       <input type="password" id="cgPass" placeholder="Team passcode" autocomplete="current-password">
@@ -694,7 +701,7 @@ select.proj-edit{width:100%;min-width:210px}
   </div>
   <div class="session-info">
     <span class="cloud-info" id="cloudWho"></span>
-    <span class="build-badge" title="Currently loaded app build">b260609zm</span>
+    <span class="build-badge" title="Currently loaded app build">b260609zn</span>
     <button class="btn sm cloud-info" id="cloudLogout" hidden>Sign out</button>
   </div>
 </header>
@@ -837,8 +844,8 @@ select.proj-edit{width:100%;min-width:210px}
     </div>
     <div class="modal-body">
       <div class="form-grid">
-        <label>Member
-          <select id="wbMember"></select>
+        <label>Members <span class="lbl-hint">(click to select several)</span>
+          <div id="wbMember" class="wb-members"></div>
         </label>
         <label>Project
           <select id="wbProject"></select>
@@ -3124,13 +3131,13 @@ function applyProjAliases(text){
 let wbImages=[];
 function openWorkbench(preMemberId, preProjk){
   renderWorkbenchSelect();
-  if(preMemberId && members.some(m=>m.id===preMemberId)) $('#wbMember').value=preMemberId;
-  // members can only file under their own name
   const wbm=$('#wbMember');
+  if(preMemberId && members.some(m=>m.id===preMemberId)){ const c=wbm.querySelector(`[data-wbm="${preMemberId}"]`); if(c) c.classList.add('on'); }
+  // members can only file under their own name
   if(CLOUD.me && !CLOUD.me.admin){
     const me=members.find(x=>x.name.toLowerCase()===CLOUD.me.name.toLowerCase());
-    if(me){ wbm.value=me.id; } wbm.disabled=true;
-  } else { wbm.disabled=false; }
+    wbm.querySelectorAll('.wbm').forEach(c=>{ const mine=!!me&&c.dataset.wbm===me.id; c.classList.toggle('on',mine); c.disabled=!mine; });
+  }
   $('#phraseRow').innerHTML=Object.keys(PHRASES).map(k=>`<button data-phrase="${esc(k)}">${esc(k)}</button>`).join('');
   wbImages=[]; renderWbThumbs();
   $('#wbProject').innerHTML=projectOptionsHTML(preProjk||'');       // project dropdown — known projects only; ＋ on a project pre-selects it
@@ -3139,19 +3146,20 @@ function openWorkbench(preMemberId, preProjk){
   $('#workbenchModal').hidden=false;
 }
 function renderWorkbenchSelect(){
-  const sel=$('#wbMember'); if(!sel) return;
-  sel.innerHTML=members.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('')||'<option value="">(add members first)</option>';
+  const box=$('#wbMember'); if(!box) return;   // multi-select chips: click to toggle each member
+  box.innerHTML=members.map(m=>`<button type="button" class="wbm" data-wbm="${m.id}">${esc(m.name)}</button>`).join('')||'<span class="hint">(add members first)</span>';
 }
 function renderWbThumbs(){
   $('#wbThumbs').innerHTML=wbImages.map((im,i)=>`<div class="th"><img src="${im.data}" data-light="${im.id}"><button class="rm" data-rm-wb="${i}">✕</button></div>`).join('');
 }
 function saveWorkbench(){
-  const mid=$('#wbMember').value; if(!mid){ toast('Add a member first'); return; }
+  const ids=[...document.querySelectorAll('#wbMember .wbm.on')].map(b=>b.dataset.wbm);
+  if(!ids.length){ toast('Pick at least one member'); return; }
   const pv=$('#wbProject').value; const pg=projectGroups().find(x=>x.projk===pv);
   const project = pg ? ((projMeta[pg.projk]||{}).code||pg.label) : ((pv||'').trim()||'Untitled Project');
   const current=$('#wbThisWeek').value.trim();
-  const name=memberName(mid);
-  const p={project, reporter:name, rawOwner:name, current,
+  const names=ids.map(memberName), name=names.join(', ');
+  const p={project, reporter:names[0], rawOwner:name, current,
     next:$('#wbNext').value.trim(), risk:$('#wbRisk').value, due:$('#wbDue').value,
     complexity:$('#wbComplexity').value, progress:+$('#wbProgress').value||0,
     nextProgress:+$('#wbNextProgress').value||0,
@@ -3950,6 +3958,7 @@ function wireEvents(){
     if(t.dataset.rmowner!==undefined){ const [tid,mid]=t.dataset.rmowner.split('|'); removeTaskOwner(tid,mid); return; }
     if(t.dataset.ocr!==undefined){ ocrTask(t.dataset.ocr); return; }
     { const ot=t.closest('[data-opentask]'); if(ot){ openTask(ot.dataset.opentask); return; } }   // closest(): clicking the TEXT inside the chip must work too
+    { const wb=t.closest('.wbm'); if(wb){ if(!wb.disabled) wb.classList.toggle('on'); return; } }
     { const ap=t.closest('[data-addtaskproj]'); if(ap){ openWorkbench(null, ap.dataset.addtaskproj); return; } }
     if(t.dataset.addtask!==undefined){ openWorkbench(t.dataset.addtask); return; }
     if(t.closest('.ctask-ctl')) return;   // don't let control clicks fall through to task-open
