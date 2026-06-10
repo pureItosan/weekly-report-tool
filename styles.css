@@ -561,17 +561,17 @@ label.check input{width:auto}
 .ptree-wrap{display:flex;flex-direction:column;gap:12px}
 .ptree-type{margin:16px 0 1px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--accent)}
 .ptree-type:first-child{margin-top:2px}
-.ptree-row{display:flex;align-items:center;gap:0;padding:14px 16px;background:var(--panel2);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow-sm)}
-.ptree-node{background:var(--surface-2);border:1px solid var(--line-2);border-radius:12px;padding:14px 18px;color:var(--text);font-weight:680;text-align:center;display:flex;flex-direction:column;gap:4px;align-items:center;min-width:104px;flex:none}
+/* geometry: every leaf row is min 66px tall with its connector pinned at y=31.5px, so the
+   trunk, stubs and elbows ALWAYS meet the cards exactly — regardless of expanded content. */
+.ptree-row{display:flex;align-items:flex-start;gap:0;padding:16px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-sm)}
+.ptree-node{background:var(--surface-2);border:1px solid var(--line-2);border-radius:12px;padding:12px 18px;color:var(--text);font-weight:680;text-align:center;display:flex;flex-direction:column;gap:4px;align-items:center;justify-content:center;min-width:104px;min-height:66px;flex:none}
 .ptn-cp{border-color:var(--accent);font-size:16px;box-shadow:0 0 0 3px rgba(90,162,255,.1)}
 .ptn-sub{font-size:12px;color:var(--muted);font-weight:500}
-.ptree-conn{width:40px;height:3px;background:linear-gradient(90deg,#4a78c0,var(--accent));flex:none;border-radius:2px;box-shadow:0 0 6px rgba(90,162,255,.4)}
-.ptree-leaves{display:flex;flex-direction:column;gap:10px;flex:1;position:relative;padding-left:22px}
-.ptree-leaves::before{content:'';position:absolute;left:0;top:20px;bottom:20px;width:3px;background:#4a78c0;border-radius:2px}
-.ptree-leaf{position:relative;background:var(--surface-2);border:1px solid var(--line-2);border-radius:12px;padding:14px 18px;color:var(--text);text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:4px;transition:border-color .15s,transform .12s,box-shadow .15s}
-.ptree-leafrow{position:relative;display:flex;gap:8px;align-items:stretch}
-.ptree-leafrow::before{content:'';position:absolute;left:-22px;top:50%;width:22px;height:3px;background:#4a78c0;border-radius:2px}
-.ptree-leaf{flex:1}
+.ptree-conn{width:40px;height:3px;margin-top:30px;background:linear-gradient(90deg,#4a78c0,var(--accent));flex:none;border-radius:2px}
+.ptree-leaves{display:flex;flex-direction:column;gap:10px;flex:1;padding-left:26px}
+.ptree-leaf{position:relative;background:var(--surface-2);border:1px solid var(--line-2);border-radius:12px;padding:10px 18px;color:var(--text);text-align:left;cursor:pointer;display:flex;flex-direction:column;justify-content:center;gap:3px;transition:border-color .15s,transform .12s,box-shadow .15s;flex:1}
+.ptree-leafrow{position:relative;display:flex;gap:8px;align-items:stretch;min-height:66px}
+.ptree-leafrow::before{content:'';position:absolute;left:-26px;top:30px;width:26px;height:3px;background:#4a78c0;border-radius:2px}
 .ptree-addtask{flex:none;align-self:center;width:34px;height:34px;border:1px dashed var(--line-2);background:var(--surface-2);color:var(--accent);border-radius:10px;font-size:17px;font-weight:700;cursor:pointer;line-height:1;transition:border-color .15s,transform .12s}
 .ptree-addtask:hover{border-color:var(--accent);transform:scale(1.08)}
 .ptree-task[draggable]{cursor:grab}
@@ -579,7 +579,20 @@ label.check input{width:auto}
 .ptree-leaf.drop-target{border-color:var(--accent2);box-shadow:0 0 0 2px rgba(110,231,183,.32)}
 .build-badge{cursor:pointer}
 /* tree: per-model task list (expand under the leaf) */
-.ptree-leafcol{display:flex;flex-direction:column;gap:6px}
+.ptree-leafcol{display:flex;flex-direction:column;gap:6px;position:relative}
+/* trunk drawn per column: each segment runs from the previous stub to its own, so joins are exact */
+.ptree-leafcol::before{content:'';position:absolute;left:-26px;top:-10px;bottom:0;width:3px;background:#4a78c0}
+.ptree-leafcol:first-child::before{top:30px}
+.ptree-leafcol:last-child::before{bottom:auto;height:43px}
+.ptree-leafcol:first-child:last-child::before{display:none}
+@media(max-width:700px){
+  .ptree-row{flex-direction:column;gap:10px}
+  .ptree-conn{display:none}
+  .ptree-node{min-height:0;width:100%}
+  .ptree-leaves{padding-left:18px}
+  .ptree-leafrow::before{left:-18px;width:18px}
+  .ptree-leafcol::before{left:-18px}
+}
 .ptree-leafexp{flex:none;align-self:center;min-width:48px;height:34px;padding:0 10px;border:1px solid var(--line-2);background:var(--surface-2);color:var(--accent);border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;transition:border-color .15s}
 .ptree-leafexp:hover{border-color:var(--accent)}
 .ptree-leaftasks{margin-left:26px;padding:2px 0 4px 12px;border-left:2px dashed var(--line-2);display:flex;flex-direction:column;gap:6px}
@@ -595,6 +608,12 @@ label.check input{width:auto}
 .due-wrap #wbDue{flex:1;min-width:0}
 .due-pick{position:absolute;left:0;bottom:0;width:1px;height:1px;opacity:0;pointer-events:none;border:0;padding:0}
 .due-btn{flex:none;padding:6px 10px}
+/* ===== consistency pass: one kicker style + aligned chips/cards across all views ===== */
+.ptree-type,.pm-type,.ptt-head,.pv-sectitle,.eyebrow{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.7px}
+.ptree-type,.pm-type-name{color:var(--accent)}
+.ptree-task{border-radius:10px;font-size:14px;padding:9px 12px}
+.tmember{border-radius:12px}
+.hl-item{border-radius:10px}
 /* task modal: OCR reference box (never exported) */
 .ocr-box{background:var(--surface-2);border:1px dashed var(--line-2);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--muted);white-space:pre-wrap;max-height:150px;overflow:auto;margin:4px 0 0;font-family:ui-monospace,Menlo,Consolas,monospace}
 .ptree-leaf:hover{border-color:var(--accent);transform:translateX(3px);box-shadow:0 6px 20px -10px rgba(90,162,255,.5)}
@@ -604,7 +623,7 @@ label.check input{width:auto}
 .ptl-tasks{font-size:12px;color:var(--accent);font-weight:600}
 /* tree: task branch under a Customer Project */
 .ptree-tasks{margin-top:11px;padding:12px 0 2px 14px;border-top:1px dashed var(--line);display:flex;flex-direction:column;gap:6px;align-self:stretch}
-.ptt-head{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.ptt-head{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--muted)}
 .ptree-task{display:flex;align-items:center;gap:10px;background:var(--surface-2);border:1px solid var(--line-2);border-radius:8px;padding:8px 12px;color:var(--text);text-align:left;cursor:pointer;font-size:13px;transition:border-color .12s,transform .12s}
 .ptree-task:hover{border-color:var(--accent);transform:translateX(2px)}
 .ptt-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none;box-shadow:0 0 0 3px rgba(255,255,255,.03)}
@@ -656,7 +675,7 @@ select.proj-edit{width:100%;min-width:210px}
 .pv-role{font-size:12px;color:var(--accent)}
 .pv-meta{margin-left:auto;font-size:12px;color:var(--muted)}
 .pv-sec{margin-top:8px}
-.pv-sectitle{font-size:12px;font-weight:700;letter-spacing:.5px;color:var(--accent);text-transform:uppercase;margin-bottom:5px}
+.pv-sectitle{font-size:12px;font-weight:700;letter-spacing:.7px;color:var(--accent);text-transform:uppercase;margin-bottom:6px}
 .pv-proj{margin:0 0 7px 0}
 .pv-proj b{font-size:13px;color:#bcd6ff;font-family:ui-monospace,Menlo,Consolas,monospace}
 .pv-line{font-size:13px;color:var(--text);margin:2px 0 2px 10px;display:flex;gap:8px}

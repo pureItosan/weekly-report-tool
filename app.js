@@ -1578,7 +1578,7 @@ function renderMatrixHTML(groups){
           </td></tr>`;
       });
     });
-    html+=`<div class="pm-type"><span class="pm-type-name cat-${esc(ty)}">${esc(ty)}</span><span class="pm-type-n">${nProj} model${nProj>1?'s':''}</span></div>
+    html+=`<div class="pm-type"><span class="pm-type-name">${esc(ty)}</span><span class="pm-type-n">${nProj} model${nProj>1?'s':''}</span></div>
       <table class="pmatrix"><thead><tr><th>Customer</th><th>Customer&nbsp;Project</th><th>Component</th><th>Model</th><th>Chipset</th><th>Tasks</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
   });
   return html+'</div>';
@@ -1603,7 +1603,7 @@ function renderTreeHTML(groups){
   let html='<div class="ptree-wrap">';
   projTypeOrder(types).forEach(ty=>{
     const block=types[ty];
-    html+=`<div class="ptree-type cat-${esc(ty)}">${esc(ty)}</div>`;
+    html+=`<div class="ptree-type">${esc(ty)}</div>`;
     block.order.forEach(key=>{
       const grp=block.map[key];
       const leaves=grp.items.map(g=>{
