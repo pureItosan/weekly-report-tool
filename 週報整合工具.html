@@ -605,6 +605,8 @@ label.check input{width:auto}
 .due-wrap #wbDue{flex:1;min-width:0}
 .due-pick{position:absolute;left:0;bottom:0;width:1px;height:1px;opacity:0;pointer-events:none;border:0;padding:0}
 .due-btn{flex:none;padding:6px 10px}
+/* task modal: OCR reference box (never exported) */
+.ocr-box{background:var(--surface-2);border:1px dashed var(--line-2);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--muted);white-space:pre-wrap;max-height:150px;overflow:auto;margin:4px 0 0;font-family:ui-monospace,Menlo,Consolas,monospace}
 .ptree-leaf:hover{border-color:var(--accent);transform:translateX(3px);box-shadow:0 6px 20px -10px rgba(90,162,255,.5)}
 .ptl-comp{font-size:12px;color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
 .ptl-code{font-size:15px;font-weight:700;font-family:ui-monospace,Menlo,Consolas,monospace;color:#dce9ff}
@@ -679,7 +681,7 @@ select.proj-edit{width:100%;min-width:210px}
   <div class="cg-box">
     <div class="cg-logo">📋</div>
     <h2>Weekly Report Hub</h2>
-    <div class="cg-ver">build 260609zo</div>
+    <div class="cg-ver">build 260609zp</div>
     <div id="cgPassWrap">
       <p class="cg-sub">Enter your team passcode to sign in</p>
       <input type="password" id="cgPass" placeholder="Team passcode" autocomplete="current-password">
@@ -706,7 +708,7 @@ select.proj-edit{width:100%;min-width:210px}
   </div>
   <div class="session-info">
     <span class="cloud-info" id="cloudWho"></span>
-    <span class="build-badge" title="Currently loaded app build">b260609zo</span>
+    <span class="build-badge" title="Currently loaded app build">b260609zp</span>
     <button class="btn sm cloud-info" id="cloudLogout" hidden>Sign out</button>
   </div>
 </header>
@@ -3036,6 +3038,8 @@ function openTask(id){
       ${t.prev?`<div class="section-title">Previous</div><div class="hint">${esc(t.prev.current||'—')} (was ${t.prev.progress}%, risk ${t.prev.risk})</div>`:''}
       <div class="section-title">Issue analysis (editable)</div>
       <textarea class="task-edit analysis-edit" data-edit="analysis" data-tid="${t.id}" rows="3" placeholder="Issue analysis">${esc(t.analysis||generateAnalysis(t))}</textarea>
+      ${t.ocrText?`<div class="section-title">OCR text from images — reference only, never exported <button class="btn xs danger" data-clearocr="${t.id}">✕ Discard</button></div>
+      <pre class="ocr-box">${esc(t.ocrText)}</pre>`:''}
       <div class="section-title">Attachments (delete one-by-one or clear all; exports and cloud stay in sync)
         ${(t.images||[]).length?`<button class="btn xs danger clearimg-btn" data-clearimg="${t.id}">🗑 Clear all (${t.images.length})</button>`:''}</div>
       <div class="imgs editable" id="taskImgsBox">
@@ -3800,7 +3804,7 @@ async function ocrTask(id){
       }
       t.current=text; t.imageReport=false; t.project='OCR report'; t.projectLabel='OCR report';
     } else {
-      t.current=(t.current? t.current+' ; ' : '')+'[OCR] '+text;
+      t.ocrText=text;                                   // reference only — shown in the modal, NEVER exported to Word/PPTX
     }
     t.ocrDone=true; persist(); renderAll(); openTask(id);
     toast('✅ OCR done');
@@ -3942,6 +3946,7 @@ function wireEvents(){
     if(t.dataset.rmWb!==undefined){ wbImages.splice(+t.dataset.rmWb,1); renderWbThumbs(); return; }
     if(t.dataset.phrase){ const ta=$('#wbThisWeek'); ta.value=(ta.value?ta.value+' ':'')+PHRASES[t.dataset.phrase]; return; }
     if(t.dataset.clearimg){ clearTaskImages(t.dataset.clearimg); return; }
+    if(t.dataset.clearocr){ const tk=tasks.find(x=>x.id===t.dataset.clearocr); if(tk){ delete tk.ocrText; persist(); openTask(tk.id); toast('OCR text discarded'); } return; }
     if(t.dataset.delimg){ const [tid,imgId]=t.dataset.delimg.split('|'); removeTaskImage(tid,imgId); return; }
     if(t.dataset.light){ openLight(imageDataById(t.dataset.light)||t.getAttribute('src')); return; }
     if(t.dataset.exportMember!==undefined){ if(t.dataset.exportMember) exportWord([t.dataset.exportMember]); else toast('This task has no matching member'); return; }

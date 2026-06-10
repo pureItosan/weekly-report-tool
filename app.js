@@ -2002,6 +2002,8 @@ function openTask(id){
       ${t.prev?`<div class="section-title">Previous</div><div class="hint">${esc(t.prev.current||'—')} (was ${t.prev.progress}%, risk ${t.prev.risk})</div>`:''}
       <div class="section-title">Issue analysis (editable)</div>
       <textarea class="task-edit analysis-edit" data-edit="analysis" data-tid="${t.id}" rows="3" placeholder="Issue analysis">${esc(t.analysis||generateAnalysis(t))}</textarea>
+      ${t.ocrText?`<div class="section-title">OCR text from images — reference only, never exported <button class="btn xs danger" data-clearocr="${t.id}">✕ Discard</button></div>
+      <pre class="ocr-box">${esc(t.ocrText)}</pre>`:''}
       <div class="section-title">Attachments (delete one-by-one or clear all; exports and cloud stay in sync)
         ${(t.images||[]).length?`<button class="btn xs danger clearimg-btn" data-clearimg="${t.id}">🗑 Clear all (${t.images.length})</button>`:''}</div>
       <div class="imgs editable" id="taskImgsBox">
@@ -2766,7 +2768,7 @@ async function ocrTask(id){
       }
       t.current=text; t.imageReport=false; t.project='OCR report'; t.projectLabel='OCR report';
     } else {
-      t.current=(t.current? t.current+' ; ' : '')+'[OCR] '+text;
+      t.ocrText=text;                                   // reference only — shown in the modal, NEVER exported to Word/PPTX
     }
     t.ocrDone=true; persist(); renderAll(); openTask(id);
     toast('✅ OCR done');
@@ -2908,6 +2910,7 @@ function wireEvents(){
     if(t.dataset.rmWb!==undefined){ wbImages.splice(+t.dataset.rmWb,1); renderWbThumbs(); return; }
     if(t.dataset.phrase){ const ta=$('#wbThisWeek'); ta.value=(ta.value?ta.value+' ':'')+PHRASES[t.dataset.phrase]; return; }
     if(t.dataset.clearimg){ clearTaskImages(t.dataset.clearimg); return; }
+    if(t.dataset.clearocr){ const tk=tasks.find(x=>x.id===t.dataset.clearocr); if(tk){ delete tk.ocrText; persist(); openTask(tk.id); toast('OCR text discarded'); } return; }
     if(t.dataset.delimg){ const [tid,imgId]=t.dataset.delimg.split('|'); removeTaskImage(tid,imgId); return; }
     if(t.dataset.light){ openLight(imageDataById(t.dataset.light)||t.getAttribute('src')); return; }
     if(t.dataset.exportMember!==undefined){ if(t.dataset.exportMember) exportWord([t.dataset.exportMember]); else toast('This task has no matching member'); return; }

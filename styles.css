@@ -595,6 +595,8 @@ label.check input{width:auto}
 .due-wrap #wbDue{flex:1;min-width:0}
 .due-pick{position:absolute;left:0;bottom:0;width:1px;height:1px;opacity:0;pointer-events:none;border:0;padding:0}
 .due-btn{flex:none;padding:6px 10px}
+/* task modal: OCR reference box (never exported) */
+.ocr-box{background:var(--surface-2);border:1px dashed var(--line-2);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--muted);white-space:pre-wrap;max-height:150px;overflow:auto;margin:4px 0 0;font-family:ui-monospace,Menlo,Consolas,monospace}
 .ptree-leaf:hover{border-color:var(--accent);transform:translateX(3px);box-shadow:0 6px 20px -10px rgba(90,162,255,.5)}
 .ptl-comp{font-size:12px;color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
 .ptl-code{font-size:15px;font-weight:700;font-family:ui-monospace,Menlo,Consolas,monospace;color:#dce9ff}
