@@ -662,7 +662,7 @@ select.proj-edit{width:100%;min-width:210px}
   <div class="cg-box">
     <div class="cg-logo">📋</div>
     <h2>Weekly Report Hub</h2>
-    <div class="cg-ver">build 260609zk</div>
+    <div class="cg-ver">build 260609zl</div>
     <div id="cgPassWrap">
       <p class="cg-sub">Enter your team passcode to sign in</p>
       <input type="password" id="cgPass" placeholder="Team passcode" autocomplete="current-password">
@@ -689,7 +689,7 @@ select.proj-edit{width:100%;min-width:210px}
   </div>
   <div class="session-info">
     <span class="cloud-info" id="cloudWho"></span>
-    <span class="build-badge" title="Currently loaded app build">b260609zk</span>
+    <span class="build-badge" title="Currently loaded app build">b260609zl</span>
     <button class="btn sm cloud-info" id="cloudLogout" hidden>Sign out</button>
   </div>
 </header>
@@ -2661,6 +2661,8 @@ function catalogCard(g){
          <input class="pc-in" data-mf="code" placeholder="Code" value="${esc(meta.code||'')}">
          <input class="pc-in" data-mf="customer" placeholder="Customer" value="${esc(meta.customer||'')}">
          ${catSelectEdit}
+         <input class="pc-in" data-mf="custProj" placeholder="Customer Project (e.g. ID515)" value="${esc(meta.custProj||'')}">
+         <input class="pc-in" data-mf="component" placeholder="Component (e.g. Mainboard)" value="${esc(meta.component||'')}">
          <input class="pc-in" data-mf="chipset" placeholder="Chipset" value="${esc(meta.chipset||'')}">
          <input class="pc-in wide" data-mf="desc" placeholder="Description" value="${esc(desc)}">
          <button class="btn sm primary" data-save-proj="${esc(g.projk)}">Save</button>
@@ -3466,6 +3468,31 @@ function assemblePptx(memberIds){
     attachPages(name,role,imgs);
   }
 
+  // first page(s): the official project MATRIX (Customer | Type | Customer Project | Component | Model | Chipset)
+  function matrixSlides(){
+    const mgroups=projectGroups().filter(g=>(projMeta[g.projk]||{}).master);
+    if(!mgroups.length) return;
+    const types=projTree(mgroups), data=[];
+    projTypeOrder(types).forEach(ty=>{ const block=types[ty];
+      block.order.forEach(key=>{ const grp=block.map[key];
+        grp.items.forEach((g,idx)=>{ const m=projMeta[g.projk]||{};
+          data.push([idx===0?(grp.cust||'—'):'', idx===0?ty:'', idx===0?(grp.cp||'—'):'',
+            m.component||projComponent(g)||'—', m.code||g.label, m.chipset||'—', String(g.tasks.length||'—')]);
+        });
+      });
+    });
+    const head=['Customer','Type','Customer Project','Component','Model','Chipset','Tasks'].map(tx=>({text:tx,options:{bold:true,color:'FFFFFF',fill:{color:PPT.navy},fontSize:10,valign:'middle',fontFace:PPT.font}}));
+    const CHUNK=24;
+    for(let i=0;i<data.length;i+=CHUNK){
+      const s=pptx.addSlide();
+      s.addShape(R,{x:0,y:0,w:13.33,h:0.12,fill:{color:PPT.cyan}});
+      s.addText('PROJECT MATRIX'+(data.length>CHUNK?` (${Math.floor(i/CHUNK)+1})`:''),{x:0.7,y:0.3,w:9,h:0.6,fontSize:24,bold:true,color:PPT.navy,fontFace:PPT.font});
+      s.addText(date,{x:10.2,y:0.42,w:2.4,h:0.4,fontSize:12,color:PPT.gray,fontFace:PPT.font,align:'right'});
+      const rows=[head, ...data.slice(i,i+CHUNK).map((r,ri)=>r.map((c,ci)=>({text:String(c),options:{fontSize:9,fontFace:PPT.font,color:ci===4?PPT.navy:PPT.dark,bold:ci===4||(!!c&&ci<=2),fill:{color:(ri%2)?'F1F5FB':'FFFFFF'},valign:'middle',align:ci===6?'center':'left'}})))];
+      s.addTable(rows,{x:0.55,y:1.05,w:12.23,colW:[1.35,0.95,1.75,2.75,2.15,2.65,0.63],rowH:0.24,border:{type:'solid',color:'D8E0EC',pt:0.5},autoPage:false,margin:[2,4,2,4]});
+    }
+  }
+  matrixSlides();
   targets.forEach(m=>renderMember(memberDisplay(m),[m.role,m.role2].filter(Boolean).join(' · '),map.get(m.id)||[]));
   if((!memberIds||!memberIds.length) && unassigned.length)
     renderMember('Unassigned','',unassigned);
