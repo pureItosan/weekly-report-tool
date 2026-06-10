@@ -151,6 +151,18 @@ const $$ = s => Array.from(document.querySelectorAll(s));
 const uid = () => Math.random().toString(36).slice(2,10);
 const esc = s => String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.hidden=false; clearTimeout(t._t); t._t=setTimeout(()=>t.hidden=true,2800); }
+/* ---- perf diagnostics (temporary): when a click is slow, toast WHERE the time went; click the version badge to copy the log ---- */
+const PERF={ev:[], lt:[]};
+try{ new PerformanceObserver(l=>l.getEntries().forEach(e=>{ PERF.lt.push(Math.round(e.duration)); if(PERF.lt.length>30) PERF.lt.shift(); })).observe({type:'longtask'}); }catch(e){}
+try{ new PerformanceObserver(l=>l.getEntries().forEach(e=>{
+    if(e.name!=='click') return;
+    const rec={n:PERF.ev.length+1, view:(typeof currentView!=='undefined'?currentView:''),
+      wait:Math.round(e.processingStart-e.startTime), js:Math.round(e.processingEnd-e.processingStart),
+      paint:Math.round(e.startTime+e.duration-e.processingEnd), total:Math.round(e.duration)};
+    PERF.ev.push(rec); if(PERF.ev.length>30) PERF.ev.shift();
+    if(rec.total>350) toast(`⏱ slow click #${rec.n}: wait ${rec.wait} · js ${rec.js} · paint ${rec.paint} ms (tap the version badge to copy the log)`);
+  })).observe({type:'event', durationThreshold:100});
+}catch(e){}
 const norm = s => String(s||'').toLowerCase().replace(/[^a-z0-9一-鿿]+/g,'').trim();
 
 /* =====================================================================
@@ -1946,7 +1958,6 @@ function openTask(id){
   document.querySelectorAll('#taskImgsBox img').forEach(im=>{ try{ im.src=''; }catch(e){} });   // release the previous task's decoded image bitmaps so memory doesn't pile up on rapid opens
   _openTaskId=id;
   const owners=(t.ownerIds||[]).map(memberName).join(', ')||'—';
-  const imgs=(t.images||[]).map(im=>`<img src="${im.data}" data-light="${im.id}" loading="lazy" decoding="async">`).join('');
   $('#taskModalInner').innerHTML=`
     <div class="modal-head"><h2>${esc(t.projectLabel||t.project)}</h2><button class="icon-btn" data-close>✕</button></div>
     <div class="modal-body detail">
@@ -1998,26 +2009,23 @@ function openTask(id){
 }
 // decode each base64 attachment off-thread, then append the already-decoded image (cheap paint, no main-thread stall)
 const _thumbCache={};                                    // image id -> small dataURL; the modal shows THUMBS (full image only in the lightbox)
-function thumbFor(im, cb){
-  if(!im||!im.data){ cb(''); return; }
-  if(_thumbCache[im.id]){ cb(_thumbCache[im.id]); return; }
-  const img=new Image(); let done=false;
-  const fin=src=>{ if(done) return; done=true; cb(src); };
-  img.onload=()=>{ try{
-      const MAX=240, w=img.naturalWidth||im.w||MAX, h=img.naturalHeight||im.h||MAX, r=Math.min(1, MAX/Math.max(w,h));
-      if(r>=1){ _thumbCache[im.id]=im.data; fin(im.data); return; }   // already small
-      const c=document.createElement('canvas'); c.width=Math.max(1,Math.round(w*r)); c.height=Math.max(1,Math.round(h*r));
-      c.getContext('2d').drawImage(img,0,0,c.width,c.height);
-      const th=c.toDataURL('image/jpeg',.72); _thumbCache[im.id]=th; fin(th);
-    }catch(e){ fin(im.data); } };
-  img.onerror=()=>fin(im.data);
-  img.src=im.data;
-  setTimeout(()=>fin(im.data), 1500);                    // fallback: show the full image rather than nothing
+async function thumbFor(im){
+  if(!im||!im.data) return '';
+  if(_thumbCache[im.id]) return _thumbCache[im.id];
+  try{                                                   // decode + downscale OFF the main thread (createImageBitmap); main thread only draws a 240px tile
+    const blob=await (await fetch(im.data)).blob();
+    let bmp=await createImageBitmap(blob);
+    const r=Math.min(1, 240/Math.max(bmp.width,bmp.height));
+    if(r<1){ const small=await createImageBitmap(bmp,{resizeWidth:Math.max(1,Math.round(bmp.width*r)),resizeHeight:Math.max(1,Math.round(bmp.height*r)),resizeQuality:'medium'}); if(bmp.close)bmp.close(); bmp=small; }
+    const c=document.createElement('canvas'); c.width=bmp.width; c.height=bmp.height;
+    c.getContext('2d').drawImage(bmp,0,0); if(bmp.close)bmp.close();
+    const th=c.toDataURL('image/jpeg',.72); _thumbCache[im.id]=th; return th;
+  }catch(e){ return im.data; }                           // fallback: full image rather than nothing
 }
 function loadTaskImages(t){
   const box=$('#taskImgsBox'); if(!box) return; const add=box.querySelector('.img-add');
   (t.images||[]).forEach(im=>{
-    thumbFor(im, src=>{
+    thumbFor(im).then(src=>{
       if(_openTaskId!==t.id || !box.isConnected || !box.contains(add) || !src) return;
       const span=document.createElement('span'); span.className='img-edit';
       const img=new Image(); img.decoding='async'; img.setAttribute('data-light', im.id); img.src=src;
@@ -2842,6 +2850,9 @@ function wireEvents(){
   // delegated clicks
   document.body.addEventListener('click', e=>{
     const t=e.target;
+    if(t.classList && t.classList.contains('build-badge')){ const txt=JSON.stringify({ua:navigator.userAgent, clicks:PERF.ev, longtasks:PERF.lt});
+      if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(()=>toast('Diagnostics copied — paste it to Claude'),()=>prompt('Copy this:',txt));
+      else prompt('Copy this:',txt); return; }
     if(t.closest('[data-close]')){ const ov=t.closest('.modal-overlay'); if(ov){ ov.hidden=true;
       if(ov.id==='taskModal'){ _openTaskId=null; const b=$('#taskImgsBox'); if(b) b.querySelectorAll('.img-edit').forEach(s=>{ const im=s.querySelector('img'); if(im) im.src=''; s.remove(); }); } } return; }
     if(t.closest('[data-designdocs]')){ openDesignDocs(); return; }
