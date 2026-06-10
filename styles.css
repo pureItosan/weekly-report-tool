@@ -578,6 +578,11 @@ label.check input{width:auto}
 .ptree-task.dragging{opacity:.45;cursor:grabbing}
 .ptree-leaf.drop-target{border-color:var(--accent2);box-shadow:0 0 0 2px rgba(110,231,183,.32)}
 .build-badge{cursor:pointer}
+/* tree: per-model task list (expand under the leaf) */
+.ptree-leafcol{display:flex;flex-direction:column;gap:6px}
+.ptree-leafexp{flex:none;align-self:center;min-width:48px;height:34px;padding:0 10px;border:1px solid var(--line-2);background:var(--surface-2);color:var(--accent);border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;transition:border-color .15s}
+.ptree-leafexp:hover{border-color:var(--accent)}
+.ptree-leaftasks{margin-left:26px;padding:2px 0 4px 12px;border-left:2px dashed var(--line-2);display:flex;flex-direction:column;gap:6px}
 .ptree-leaf:hover{border-color:var(--accent);transform:translateX(3px);box-shadow:0 6px 20px -10px rgba(90,162,255,.5)}
 .ptl-comp{font-size:12px;color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
 .ptl-code{font-size:15px;font-weight:700;font-family:ui-monospace,Menlo,Consolas,monospace;color:#dce9ff}

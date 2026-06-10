@@ -1588,7 +1588,9 @@ function renderTreeHTML(groups){
   // weekly-report tasks are tagged by Customer Project (e.g. "B01W043 / ID535"), so link tasks to the
   // project node by derived Customer Project; tasks with no project go under a "Cross-project" node.
   const tasksByCp={}, noCp=[];
-  groups.forEach(g=>{ if(!(g.tasks||[]).length) return; const cp=projCustProj(g);
+  groups.forEach(g=>{ if(!(g.tasks||[]).length) return;
+    if((projMeta[g.projk]||{}).master) return;             // tasks assigned to a model live under that leaf, not in the CP-level branch
+    const cp=projCustProj(g);
     if(cp)(tasksByCp[cp]=tasksByCp[cp]||[]).push(...g.tasks); else noCp.push(...g.tasks); });
   const usedCp={}, CAP=6;
   const taskChip=t=>{ const txt=(t.current||t.next||'(no description)').replace(/\s+/g,' ').trim().slice(0,48);
@@ -1597,7 +1599,7 @@ function renderTreeHTML(groups){
     const exp=treeExpand[cp], list=exp?ts:ts.slice(0,CAP);
     const chips=list.map(taskChip).join('');
     const toggle=ts.length>CAP?`<button class="ptree-more" data-treeexp="${esc(cp)}">${exp?'▾ Show less':'▸ +'+(ts.length-CAP)+' more'}</button>`:'';
-    return `<div class="ptree-tasks"><div class="ptt-head">📋 ${ts.length} task${ts.length>1?'s':''}</div>${chips}${toggle}</div>`; };
+    return `<div class="ptree-tasks"><div class="ptt-head">📋 ${ts.length} task${ts.length>1?'s':''} · no model assigned — drag one onto a model card</div>${chips}${toggle}</div>`; };
   let html='<div class="ptree-wrap">';
   projTypeOrder(types).forEach(ty=>{
     const block=types[ty];
@@ -1606,13 +1608,19 @@ function renderTreeHTML(groups){
       const grp=block.map[key];
       const leaves=grp.items.map(g=>{
         const m=projMeta[g.projk]||{};
-        return `<div class="ptree-leafrow">
-          <button class="ptree-leaf" data-edit-proj="${esc(g.projk)}" title="Edit ${esc(m.code||g.label)} · drop a task here to move it">
-            <span class="ptl-comp">${esc(projComponent(g)||'Model')}</span>
-            <span class="ptl-code">${esc(m.code||g.label)}</span>
-            ${m.chipset?`<span class="ptl-chip">${esc(m.chipset)}</span>`:''}
-          </button>
-          <button class="ptree-addtask" data-addtaskproj="${esc(g.projk)}" title="Add a task to ${esc(m.code||g.label)}">＋</button>
+        const n=(g.tasks||[]).length, lk='leaf:'+g.projk, lexp=treeExpand[lk];
+        const ownTasks = (n&&lexp) ? `<div class="ptree-leaftasks">${g.tasks.map(taskChip).join('')}</div>` : '';
+        return `<div class="ptree-leafcol">
+          <div class="ptree-leafrow">
+            <button class="ptree-leaf" data-edit-proj="${esc(g.projk)}" title="Edit ${esc(m.code||g.label)} · drop a task here to move it">
+              <span class="ptl-comp">${esc(projComponent(g)||'Model')}</span>
+              <span class="ptl-code">${esc(m.code||g.label)}</span>
+              ${m.chipset?`<span class="ptl-chip">${esc(m.chipset)}</span>`:''}
+            </button>
+            ${n?`<button class="ptree-leafexp" data-treeexp="${esc(lk)}" title="Show this model's tasks">${lexp?'▾':'▸'} ${n}</button>`:''}
+            <button class="ptree-addtask" data-addtaskproj="${esc(g.projk)}" title="Add a task to ${esc(m.code||g.label)}">＋</button>
+          </div>
+          ${ownTasks}
         </div>`;
       }).join('');
       const cp=grp.cp; let branch=''; if(cp && !usedCp[cp]){ usedCp[cp]=1; branch=taskBranch(cp, tasksByCp[cp]); }
@@ -2211,7 +2219,11 @@ const PPT = {
   white:'FFFFFF', card:'F8FAFC', track:'E6ECF5', line:'D8E0EC',
   green:'10B981', amber:'F59E0B', font:'Arial', fontB:'Arial Black'
 };
-function pptPlabel(t){ return t.projectLabel||shortProj(t.project); }
+function pptPlabel(t){
+  const m=projMeta[resolveProjk(t.projk||t.key)]||{};
+  if(m.master && m.code) return (m.custProj && m.custProj!==m.code) ? (m.custProj+' - '+m.code) : m.code;   // e.g. "ID535 - B01W043T00"
+  return t.projectLabel||shortProj(t.project);
+}
 function progColor(p){ return p>=100?PPT.green : p>=70?PPT.blue : p>=34?PPT.cyan : PPT.amber; }
 function collectImages(list){
   const out=[], seen=new Set();

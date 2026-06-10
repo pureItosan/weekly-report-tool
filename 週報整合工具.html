@@ -588,6 +588,11 @@ label.check input{width:auto}
 .ptree-task.dragging{opacity:.45;cursor:grabbing}
 .ptree-leaf.drop-target{border-color:var(--accent2);box-shadow:0 0 0 2px rgba(110,231,183,.32)}
 .build-badge{cursor:pointer}
+/* tree: per-model task list (expand under the leaf) */
+.ptree-leafcol{display:flex;flex-direction:column;gap:6px}
+.ptree-leafexp{flex:none;align-self:center;min-width:48px;height:34px;padding:0 10px;border:1px solid var(--line-2);background:var(--surface-2);color:var(--accent);border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;transition:border-color .15s}
+.ptree-leafexp:hover{border-color:var(--accent)}
+.ptree-leaftasks{margin-left:26px;padding:2px 0 4px 12px;border-left:2px dashed var(--line-2);display:flex;flex-direction:column;gap:6px}
 .ptree-leaf:hover{border-color:var(--accent);transform:translateX(3px);box-shadow:0 6px 20px -10px rgba(90,162,255,.5)}
 .ptl-comp{font-size:12px;color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
 .ptl-code{font-size:15px;font-weight:700;font-family:ui-monospace,Menlo,Consolas,monospace;color:#dce9ff}
@@ -662,7 +667,7 @@ select.proj-edit{width:100%;min-width:210px}
   <div class="cg-box">
     <div class="cg-logo">📋</div>
     <h2>Weekly Report Hub</h2>
-    <div class="cg-ver">build 260609zl</div>
+    <div class="cg-ver">build 260609zm</div>
     <div id="cgPassWrap">
       <p class="cg-sub">Enter your team passcode to sign in</p>
       <input type="password" id="cgPass" placeholder="Team passcode" autocomplete="current-password">
@@ -689,7 +694,7 @@ select.proj-edit{width:100%;min-width:210px}
   </div>
   <div class="session-info">
     <span class="cloud-info" id="cloudWho"></span>
-    <span class="build-badge" title="Currently loaded app build">b260609zl</span>
+    <span class="build-badge" title="Currently loaded app build">b260609zm</span>
     <button class="btn sm cloud-info" id="cloudLogout" hidden>Sign out</button>
   </div>
 </header>
@@ -2601,7 +2606,9 @@ function renderTreeHTML(groups){
   // weekly-report tasks are tagged by Customer Project (e.g. "B01W043 / ID535"), so link tasks to the
   // project node by derived Customer Project; tasks with no project go under a "Cross-project" node.
   const tasksByCp={}, noCp=[];
-  groups.forEach(g=>{ if(!(g.tasks||[]).length) return; const cp=projCustProj(g);
+  groups.forEach(g=>{ if(!(g.tasks||[]).length) return;
+    if((projMeta[g.projk]||{}).master) return;             // tasks assigned to a model live under that leaf, not in the CP-level branch
+    const cp=projCustProj(g);
     if(cp)(tasksByCp[cp]=tasksByCp[cp]||[]).push(...g.tasks); else noCp.push(...g.tasks); });
   const usedCp={}, CAP=6;
   const taskChip=t=>{ const txt=(t.current||t.next||'(no description)').replace(/\s+/g,' ').trim().slice(0,48);
@@ -2610,7 +2617,7 @@ function renderTreeHTML(groups){
     const exp=treeExpand[cp], list=exp?ts:ts.slice(0,CAP);
     const chips=list.map(taskChip).join('');
     const toggle=ts.length>CAP?`<button class="ptree-more" data-treeexp="${esc(cp)}">${exp?'▾ Show less':'▸ +'+(ts.length-CAP)+' more'}</button>`:'';
-    return `<div class="ptree-tasks"><div class="ptt-head">📋 ${ts.length} task${ts.length>1?'s':''}</div>${chips}${toggle}</div>`; };
+    return `<div class="ptree-tasks"><div class="ptt-head">📋 ${ts.length} task${ts.length>1?'s':''} · no model assigned — drag one onto a model card</div>${chips}${toggle}</div>`; };
   let html='<div class="ptree-wrap">';
   projTypeOrder(types).forEach(ty=>{
     const block=types[ty];
@@ -2619,13 +2626,19 @@ function renderTreeHTML(groups){
       const grp=block.map[key];
       const leaves=grp.items.map(g=>{
         const m=projMeta[g.projk]||{};
-        return `<div class="ptree-leafrow">
-          <button class="ptree-leaf" data-edit-proj="${esc(g.projk)}" title="Edit ${esc(m.code||g.label)} · drop a task here to move it">
-            <span class="ptl-comp">${esc(projComponent(g)||'Model')}</span>
-            <span class="ptl-code">${esc(m.code||g.label)}</span>
-            ${m.chipset?`<span class="ptl-chip">${esc(m.chipset)}</span>`:''}
-          </button>
-          <button class="ptree-addtask" data-addtaskproj="${esc(g.projk)}" title="Add a task to ${esc(m.code||g.label)}">＋</button>
+        const n=(g.tasks||[]).length, lk='leaf:'+g.projk, lexp=treeExpand[lk];
+        const ownTasks = (n&&lexp) ? `<div class="ptree-leaftasks">${g.tasks.map(taskChip).join('')}</div>` : '';
+        return `<div class="ptree-leafcol">
+          <div class="ptree-leafrow">
+            <button class="ptree-leaf" data-edit-proj="${esc(g.projk)}" title="Edit ${esc(m.code||g.label)} · drop a task here to move it">
+              <span class="ptl-comp">${esc(projComponent(g)||'Model')}</span>
+              <span class="ptl-code">${esc(m.code||g.label)}</span>
+              ${m.chipset?`<span class="ptl-chip">${esc(m.chipset)}</span>`:''}
+            </button>
+            ${n?`<button class="ptree-leafexp" data-treeexp="${esc(lk)}" title="Show this model's tasks">${lexp?'▾':'▸'} ${n}</button>`:''}
+            <button class="ptree-addtask" data-addtaskproj="${esc(g.projk)}" title="Add a task to ${esc(m.code||g.label)}">＋</button>
+          </div>
+          ${ownTasks}
         </div>`;
       }).join('');
       const cp=grp.cp; let branch=''; if(cp && !usedCp[cp]){ usedCp[cp]=1; branch=taskBranch(cp, tasksByCp[cp]); }
@@ -3224,7 +3237,11 @@ const PPT = {
   white:'FFFFFF', card:'F8FAFC', track:'E6ECF5', line:'D8E0EC',
   green:'10B981', amber:'F59E0B', font:'Arial', fontB:'Arial Black'
 };
-function pptPlabel(t){ return t.projectLabel||shortProj(t.project); }
+function pptPlabel(t){
+  const m=projMeta[resolveProjk(t.projk||t.key)]||{};
+  if(m.master && m.code) return (m.custProj && m.custProj!==m.code) ? (m.custProj+' - '+m.code) : m.code;   // e.g. "ID535 - B01W043T00"
+  return t.projectLabel||shortProj(t.project);
+}
 function progColor(p){ return p>=100?PPT.green : p>=70?PPT.blue : p>=34?PPT.cyan : PPT.amber; }
 function collectImages(list){
   const out=[], seen=new Set();
