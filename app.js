@@ -208,8 +208,11 @@ function addMembers(list, opts){
   reresolveAllTasks();   // membership changed -> re-assign owners on existing tasks
   persist(); renderAll();
 }
+function confirm2(msg){ return confirm(msg) && confirm('Confirm again — this cannot be undone. Proceed?'); }
 function deleteMember(id){
-  const m=members.find(x=>x.id===id); if(m) deletedNames=[...new Set([...deletedNames, norm(m.name)])]; // remember -> don't auto re-add
+  const m=members.find(x=>x.id===id); if(!m) return;
+  if(!confirm2(`Remove member "${m.name}" from the roster?\n(their tasks are kept and become Unassigned)`)) return;
+  deletedNames=[...new Set([...deletedNames, norm(m.name)])]; // remember -> don't auto re-add
   members=members.filter(x=>x.id!==id); reresolveAllTasks(); persist(); renderAll();
 }
 function setMemberRole(id, role){ const m=members.find(x=>x.id===id); if(m){ m.role=normRole(role); persist(); renderAll(); } }
@@ -243,7 +246,7 @@ function autoAddFromReport(){
   if(toAdd.length) addMembers(toAdd.map(n=>({name:n, aliases:[]})));  // addMembers re-resolves + renders
   return toAdd;
 }
-function clearMembers(){ if(confirm('Clear the entire member list?(tasks are not deleted)')){ members=[]; deletedNames=[]; persist(); renderAll(); } }
+function clearMembers(){ if(confirm2('Clear the entire member list? (tasks are not deleted)')){ members=[]; deletedNames=[]; persist(); renderAll(); } }
 
 /* =====================================================================
    NAME MATCHING  (owner-priority, multi-owner, fuzzy)
@@ -792,11 +795,11 @@ function computeDelta(oldT,newT){
 }
 function deleteTask(id){
   const t=tasks.find(x=>x.id===id); if(!t) return false;
-  if(!confirm('Delete this task?\n'+((t.current||t.next||'(no description)').slice(0,60))+'\nThis cannot be undone.')) return false;
+  if(!confirm2('Delete this task?\n'+((t.current||t.next||'(no description)').slice(0,60))+'\nThis cannot be undone.')) return false;
   (t.images||[]).forEach(im=>cloudDeleteImage(im.id));        // sync-remove its cloud images too
   tasks=tasks.filter(x=>x.id!==id); persist(); renderAll(); toast('Task deleted'); return true;
 }
-function resetTasks(){ if(confirm('Clear all tasks? (members are kept)')){ tasks=[]; batches=[]; persist(); renderAll(); } }
+function resetTasks(){ if(confirm2('Clear all tasks? (members are kept)')){ tasks=[]; batches=[]; persist(); renderAll(); } }
 // 一鍵清除內容:清掉所有任務, 批次與圖片(雲端圖片也一併刪除), 成員名單保留.雙重確認避免誤按.
 function clearAllContent(){
   if(!tasks.length && !batches.length){ toast('Nothing to clear'); return; }
@@ -1091,7 +1094,7 @@ function renameCategory(oldName, newName){
 function deleteCategory(name){
   if(BASE_CATS.includes(name)||name==='General'){ toast('Built-in categories cannot be deleted'); return; }
   const used=projectGroups().filter(g=>projCategory(g)===name).length;
-  if(!confirm('Delete category "'+name+'"?'+(used?('its '+used+' project(s) will move back to General.'):'')+'\n(no projects or tasks are deleted)')) return;
+  if(!confirm2('Delete category "'+name+'"?'+(used?(' its '+used+' project(s) will move back to General.'):'')+'\n(no projects or tasks are deleted)')) return;
   projCats=projCats.filter(c=>c!==name);
   Object.keys(projMeta).forEach(k=>{ if(projMeta[k] && projMeta[k].category===name) projMeta[k].category=''; });  // back to auto/General
   persist(); renderCatalog(); toast('Category deleted: '+name);
@@ -1104,8 +1107,8 @@ function deleteProjectGroup(projk){
   const rk=resolveProjk(projk);
   const g=projectGroups().find(x=>x.projk===rk); if(!g) return;
   const tn=g.tasks.length;
-  if(!confirm('Delete project "'+g.label+'"'+(tn?('and its '+tn+' tasks'):'(no tasks)')+'"? This cannot be undone.')) return;
-  if(tn && !confirm('Confirm again: really delete "'+g.label+'" and its tasks?')) return;
+  if(!confirm('Delete project "'+g.label+'" '+(tn?('and its '+tn+' task(s)'):'(no tasks)')+'? This cannot be undone.')) return;
+  if(!confirm('Confirm again: really delete "'+g.label+'"'+(tn?(' and its '+tn+' task(s)'):'')+'?')) return;
   const ids=new Set(g.tasks.map(t=>t.id));
   tasks.forEach(t=>{ if(ids.has(t.id)) (t.images||[]).forEach(im=>cloudDeleteImage(im.id)); });  // sync-delete cloud images
   tasks=tasks.filter(t=>!ids.has(t.id));
@@ -1471,7 +1474,7 @@ function renderCatalog(){
   const views=[['tree','🌳 Tree'],['matrix','▦ Matrix']];
   const bar=`<div class="cat-viewtabs">
       ${views.map(([v,l])=>`<button class="cv-tab ${catalogView===v?'active':''}" data-catview="${v}">${l}</button>`).join('')}
-      <span class="cv-hint">✎ edit · ＋ add a task · drag a task chip onto a model card to move it.</span>
+      <span class="cv-hint">Click a model to expand its tasks · ＋ add a task · drag a chip onto a model to move it · edit / delete in ▦ Matrix.</span>
     </div>`;
   if(!groups.length){ cont.innerHTML=bar+`<p class="hint">No projects yet — import reports, or use "＋ Add project / 📋 Paste project list" above.</p>`; return; }
   if(catalogView==='matrix'){ cont.innerHTML=bar+renderMatrixHTML(groups); return; }
@@ -1491,7 +1494,7 @@ function wireTreeTaskDrag(){
     leaf.addEventListener('dragleave',()=>leaf.classList.remove('drop-target'));
     leaf.addEventListener('drop',e=>{ e.preventDefault(); leaf.classList.remove('drop-target');
       if(!_dragTaskId) return;
-      const projk=leaf.dataset.editProj, code=(projMeta[projk]||{}).code||'project';
+      const projk=leaf.dataset.projk, code=(projMeta[projk]||{}).code||'project';
       editTaskField(_dragTaskId,'project',projk);
       toast('Task moved to '+code);
       _dragTaskId=null;
@@ -1623,12 +1626,12 @@ function renderTreeHTML(groups){
         const ownTasks = (n&&lexp) ? `<div class="ptree-leaftasks">${g.tasks.map(taskChip).join('')}</div>` : '';
         return `<div class="ptree-leafcol">
           <div class="ptree-leafrow">
-            <button class="ptree-leaf" data-edit-proj="${esc(g.projk)}" title="Edit ${esc(m.code||g.label)} · drop a task here to move it">
+            <button class="ptree-leaf${n?'':' noexp'}" ${n?`data-treeexp="${esc(lk)}"`:''} data-projk="${esc(g.projk)}" title="${n?'Click to show its tasks':'No tasks yet'} · drop a task chip here to move it · edit in Matrix">
               <span class="ptl-comp">${esc(projComponent(g)||'Model')}</span>
               <span class="ptl-code">${esc(m.code||g.label)}</span>
               ${m.chipset?`<span class="ptl-chip">${esc(m.chipset)}</span>`:''}
+              ${n?`<span class="ptl-tasks">${lexp?'▾':'▸'} ${n} task${n>1?'s':''}</span>`:''}
             </button>
-            ${n?`<button class="ptree-leafexp" data-treeexp="${esc(lk)}" title="Show this model's tasks">${lexp?'▾':'▸'} ${n}</button>`:''}
             <button class="ptree-addtask" data-addtaskproj="${esc(g.projk)}" title="Add a task to ${esc(m.code||g.label)}">＋</button>
           </div>
           ${ownTasks}
@@ -1741,7 +1744,7 @@ function cloudDeleteImage(imgId){                       // also remove from the 
 }
 function clearTaskImages(tid){
   const t=tasks.find(x=>x.id===tid); if(!t||!(t.images||[]).length) return;
-  if(!confirm('Clear all '+t.images.length+' images on this task?')) return;
+  if(!confirm2('Clear all '+t.images.length+' images on this task?')) return;
   (t.images||[]).forEach(im=>cloudDeleteImage(im.id));
   t.images=[];
   persist(); renderMembersArea(); if(_openTaskId===tid && !$('#taskModal').hidden) openTask(tid);

@@ -574,6 +574,9 @@ label.check input{width:auto}
 .ptree-leafrow::before{content:'';position:absolute;left:-26px;top:30px;width:26px;height:3px;background:#4a78c0;border-radius:2px}
 .ptree-addtask{flex:none;align-self:center;width:34px;height:34px;border:1px dashed var(--line-2);background:var(--surface-2);color:var(--accent);border-radius:10px;font-size:17px;font-weight:700;cursor:pointer;line-height:1;transition:border-color .15s,transform .12s}
 .ptree-addtask:hover{border-color:var(--accent);transform:scale(1.08)}
+.ptree-leaf.noexp{cursor:default}
+.ptree-leaf.noexp:hover{transform:none;box-shadow:none;border-color:var(--line-2)}
+.ptree-leaf .ptl-tasks{margin-top:2px}
 .ptree-task[draggable]{cursor:grab}
 .ptree-task.dragging{opacity:.45;cursor:grabbing}
 .ptree-leaf.drop-target{border-color:var(--accent2);box-shadow:0 0 0 2px rgba(110,231,183,.32)}
