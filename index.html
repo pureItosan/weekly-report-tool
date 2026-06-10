@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Weekly Report Hub</title>
-<link rel="stylesheet" href="styles.css?v=260609zn">
+<link rel="stylesheet" href="styles.css?v=260609zo">
 </head>
 <body>
 <!-- ===== CLOUD LOGIN GATE (online only) ===== -->
@@ -15,7 +15,7 @@
   <div class="cg-box">
     <div class="cg-logo">📋</div>
     <h2>Weekly Report Hub</h2>
-    <div class="cg-ver">build 260609zn</div>
+    <div class="cg-ver">build 260609zo</div>
     <div id="cgPassWrap">
       <p class="cg-sub">Enter your team passcode to sign in</p>
       <input type="password" id="cgPass" placeholder="Team passcode" autocomplete="current-password">
@@ -42,7 +42,7 @@
   </div>
   <div class="session-info">
     <span class="cloud-info" id="cloudWho"></span>
-    <span class="build-badge" title="Currently loaded app build">b260609zn</span>
+    <span class="build-badge" title="Currently loaded app build">b260609zo</span>
     <button class="btn sm cloud-info" id="cloudLogout" hidden>Sign out</button>
   </div>
 </header>
@@ -195,7 +195,11 @@
           <select id="wbRisk"><option>Low</option><option>Medium</option><option>High</option></select>
         </label>
         <label>Due date
-          <input id="wbDue" type="date">
+          <div class="due-wrap">
+            <input id="wbDue" placeholder="YYYY-MM-DD or 6/E" autocomplete="off">
+            <input id="wbDuePick" type="date" class="due-pick" tabindex="-1" aria-hidden="true">
+            <button type="button" class="btn sm due-btn" id="wbDueBtn" title="Pick a date">📅</button>
+          </div>
         </label>
         <label>This week progress (%)
           <input id="wbProgress" type="number" min="0" max="100" value="0">

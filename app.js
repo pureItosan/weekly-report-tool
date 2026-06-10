@@ -2117,6 +2117,7 @@ function openWorkbench(preMemberId, preProjk){
   wbImages=[]; renderWbThumbs();
   $('#wbProject').innerHTML=projectOptionsHTML(preProjk||'');       // project dropdown — known projects only; ＋ on a project pre-selects it
   ['#wbThisWeek','#wbIssue','#wbNext'].forEach(s=>$(s).value='');
+  { const d=$('#wbDue'), dp=$('#wbDuePick'); if(d) d.value=''; if(dp) dp.value=''; }
   $('#wbProgress').value=0; $('#wbNextProgress').value=0;
   $('#workbenchModal').hidden=false;
 }
@@ -2885,6 +2886,9 @@ function wireEvents(){
   $('#aliasText').value=aliasToText();
   $('#wbSaveBtn').addEventListener('click', saveWorkbench);
   $('#wbOcrBtn').addEventListener('click', ocrToWorkbench);
+  { const db=$('#wbDueBtn'), dp=$('#wbDuePick');                       // English due-date: text shows ISO; 📅 opens the native calendar
+    if(db&&dp){ db.addEventListener('click', ()=>{ try{ dp.showPicker?dp.showPicker():dp.click(); }catch(e){ toast('Type the date as YYYY-MM-DD'); } });
+      dp.addEventListener('change', ()=>{ if(dp.value) $('#wbDue').value=dp.value; }); } }
   $('#wbImages').addEventListener('change', async e=>{ for(const f of e.target.files){ const s=await shrinkImageBudget(await fileToDataURL(f), 2200); wbImages.push({id:uid(), data:s.data, w:s.w, h:s.h}); } renderWbThumbs(); e.target.value=''; });
 
   // delegated clicks

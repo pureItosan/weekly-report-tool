@@ -600,6 +600,11 @@ label.check input{width:auto}
 .wbm:hover{border-color:var(--accent);color:var(--text)}
 .wbm.on{background:linear-gradient(180deg,#2a4a7a,#1d355c);border-color:var(--accent);color:#fff;font-weight:650}
 .wbm:disabled{opacity:.35;cursor:not-allowed}
+/* workbench: english due-date input + calendar button */
+.due-wrap{position:relative;display:flex;gap:6px;align-items:stretch}
+.due-wrap #wbDue{flex:1;min-width:0}
+.due-pick{position:absolute;left:0;bottom:0;width:1px;height:1px;opacity:0;pointer-events:none;border:0;padding:0}
+.due-btn{flex:none;padding:6px 10px}
 .ptree-leaf:hover{border-color:var(--accent);transform:translateX(3px);box-shadow:0 6px 20px -10px rgba(90,162,255,.5)}
 .ptl-comp{font-size:12px;color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
 .ptl-code{font-size:15px;font-weight:700;font-family:ui-monospace,Menlo,Consolas,monospace;color:#dce9ff}
@@ -674,7 +679,7 @@ select.proj-edit{width:100%;min-width:210px}
   <div class="cg-box">
     <div class="cg-logo">📋</div>
     <h2>Weekly Report Hub</h2>
-    <div class="cg-ver">build 260609zn</div>
+    <div class="cg-ver">build 260609zo</div>
     <div id="cgPassWrap">
       <p class="cg-sub">Enter your team passcode to sign in</p>
       <input type="password" id="cgPass" placeholder="Team passcode" autocomplete="current-password">
@@ -701,7 +706,7 @@ select.proj-edit{width:100%;min-width:210px}
   </div>
   <div class="session-info">
     <span class="cloud-info" id="cloudWho"></span>
-    <span class="build-badge" title="Currently loaded app build">b260609zn</span>
+    <span class="build-badge" title="Currently loaded app build">b260609zo</span>
     <button class="btn sm cloud-info" id="cloudLogout" hidden>Sign out</button>
   </div>
 </header>
@@ -854,7 +859,11 @@ select.proj-edit{width:100%;min-width:210px}
           <select id="wbRisk"><option>Low</option><option>Medium</option><option>High</option></select>
         </label>
         <label>Due date
-          <input id="wbDue" type="date">
+          <div class="due-wrap">
+            <input id="wbDue" placeholder="YYYY-MM-DD or 6/E" autocomplete="off">
+            <input id="wbDuePick" type="date" class="due-pick" tabindex="-1" aria-hidden="true">
+            <button type="button" class="btn sm due-btn" id="wbDueBtn" title="Pick a date">📅</button>
+          </div>
         </label>
         <label>This week progress (%)
           <input id="wbProgress" type="number" min="0" max="100" value="0">
@@ -3142,6 +3151,7 @@ function openWorkbench(preMemberId, preProjk){
   wbImages=[]; renderWbThumbs();
   $('#wbProject').innerHTML=projectOptionsHTML(preProjk||'');       // project dropdown — known projects only; ＋ on a project pre-selects it
   ['#wbThisWeek','#wbIssue','#wbNext'].forEach(s=>$(s).value='');
+  { const d=$('#wbDue'), dp=$('#wbDuePick'); if(d) d.value=''; if(dp) dp.value=''; }
   $('#wbProgress').value=0; $('#wbNextProgress').value=0;
   $('#workbenchModal').hidden=false;
 }
@@ -3910,6 +3920,9 @@ function wireEvents(){
   $('#aliasText').value=aliasToText();
   $('#wbSaveBtn').addEventListener('click', saveWorkbench);
   $('#wbOcrBtn').addEventListener('click', ocrToWorkbench);
+  { const db=$('#wbDueBtn'), dp=$('#wbDuePick');                       // English due-date: text shows ISO; 📅 opens the native calendar
+    if(db&&dp){ db.addEventListener('click', ()=>{ try{ dp.showPicker?dp.showPicker():dp.click(); }catch(e){ toast('Type the date as YYYY-MM-DD'); } });
+      dp.addEventListener('change', ()=>{ if(dp.value) $('#wbDue').value=dp.value; }); } }
   $('#wbImages').addEventListener('change', async e=>{ for(const f of e.target.files){ const s=await shrinkImageBudget(await fileToDataURL(f), 2200); wbImages.push({id:uid(), data:s.data, w:s.w, h:s.h}); } renderWbThumbs(); e.target.value=''; });
 
   // delegated clicks
