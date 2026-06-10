@@ -1770,11 +1770,13 @@ function addTaskOwner(id, mid){
   const t=tasks.find(x=>x.id===id); if(!t||!mid) return;
   t.ownerIds=t.ownerIds||[]; if(!t.ownerIds.includes(mid)) t.ownerIds.push(mid);
   t.manualOwners=true; t.shared=t.ownerIds.length>1; persist(); renderAll();
+  if(_openTaskId===id && !$('#taskModal').hidden) openTask(id);   // refresh the open modal
 }
 function removeTaskOwner(id, mid){
   const t=tasks.find(x=>x.id===id); if(!t) return;
   t.ownerIds=(t.ownerIds||[]).filter(x=>x!==mid);
   t.manualOwners=true; t.shared=t.ownerIds.length>1; persist(); renderAll();
+  if(_openTaskId===id && !$('#taskModal').hidden) openTask(id);
 }
 function saveProjMeta(projk, card){
   const m=Object.assign({}, projMeta[projk]||{});   // keep existing fields (master/code/phase/chipset/schedule…)
@@ -1981,7 +1983,7 @@ function openTask(id){
   const t=tasks.find(x=>x.id===id); if(!t) return;
   document.querySelectorAll('#taskImgsBox img').forEach(im=>{ try{ im.src=''; }catch(e){} });   // release the previous task's decoded image bitmaps so memory doesn't pile up on rapid opens
   _openTaskId=id;
-  const owners=(t.ownerIds||[]).map(memberName).join(', ')||'—';
+  const ownerChips=((t.ownerIds||[]).map(id=>`<span class="owner-chip">${memberRoleBadges(id)}${esc(memberName(id))}<button data-rmowner="${t.id}|${id}" title="Remove">×</button></span>`).join(''))||'<span class="owner-chip none">Unassigned</span>';
   $('#taskModalInner').innerHTML=`
     <div class="modal-head"><h2>${esc(t.projectLabel||t.project)}</h2><button class="icon-btn" data-close>✕</button></div>
     <div class="modal-body detail">
@@ -2004,7 +2006,7 @@ function openTask(id){
         <span class="k">Due date</span><span>${esc(t.due||'—')}</span>
         <span class="k">Owner (raw)</span><span>${esc(t.rawOwner||'—')}</span>
         <span class="k">Reporter</span><span>${esc(t.reporter||'—')}</span>
-        <span class="k">Assigned members</span><span>${esc(owners)}</span>
+        <span class="k">Assigned members</span><span class="owners">${ownerChips}<select class="add-owner" data-addowner="${t.id}"><option value="">＋ Add member</option>${memberOptionsByRole(t.ownerIds)}</select></span>
         ${t.unmatched&&t.unmatched.length?`<span class="k">Unmatched</span><span style="color:var(--warn)">${esc(t.unmatched.join(', '))}</span>`:''}
         <span class="k">Source</span><span>${esc(t.source||'manual')}</span>
       </div>
