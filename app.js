@@ -767,7 +767,13 @@ function dedupeTasks(){
         const sb=new Set(hb); let m=0; ha.forEach(x=>{ if(sb.has(x)) m++; });
         if(m/Math.min(ha.length,hb.length) >= 0.7){          // same opening words -> same item (different OCR garbling)
           const keep=scoreTask(arr[i])>=scoreTask(arr[j])?arr[i]:arr[j];
-          remove.add((keep===arr[i]?arr[j]:arr[i]).id);
+          const drop=(keep===arr[i]?arr[j]:arr[i]);
+          if((drop.images||[]).length){                      // never orphan attachments — move them onto the kept task
+            keep.images=keep.images||[];
+            drop.images.forEach(di=>{ if(di&&di.id&&!keep.images.some(ki=>ki.id===di.id)){ keep.images.push(di);
+              if(CLOUD.on&&CLOUD.db&&CLOUD.upImgs.has(di.id)) CLOUD.db.collection('images').doc(di.id).set({taskId:keep.id},{merge:true}).catch(()=>{}); } });
+          }
+          remove.add(drop.id);
           if(keep===arr[j]){ break; }
         }
       }
@@ -1739,7 +1745,9 @@ function editTaskField(id, field, val){
   if(!$('#taskModal').hidden && _openTaskId===id && !['project','current','next','analysis','topic'].includes(field)) openTask(id);
 }
 function cloudDeleteImage(imgId){                       // also remove from the cloud images collection
-  if(imgId && typeof CLOUD!=='undefined' && CLOUD.on && CLOUD.db){
+  if(!imgId || typeof CLOUD==='undefined') return;
+  (CLOUD.deadImgs=CLOUD.deadImgs||new Set()).add(imgId);  // tombstone: this id must never be merged back or re-uploaded
+  if(CLOUD.on && CLOUD.db){
     CLOUD.upImgs.delete(imgId);
     CLOUD.db.collection('images').doc(imgId).delete().catch(e=>console.warn('image delete failed', e));
   }
@@ -2099,7 +2107,10 @@ function loadTaskImages(t){
     span.appendChild(img);
     const del=document.createElement('button'); del.className='img-del';
     del.setAttribute('data-delimg', t.id+'|'+im.id); del.title='Delete this image'; del.textContent='✕';
-    span.appendChild(del); box.insertBefore(span, add);
+    span.appendChild(del);
+    const mv=document.createElement('button'); mv.className='img-move';
+    mv.setAttribute('data-moveimg', t.id+'|'+im.id); mv.title='Move this image to another task'; mv.textContent='⇄';
+    span.appendChild(mv); box.insertBefore(span, add);
     span.addEventListener('dragstart',e=>{ _dragImgId=im.id; try{ e.dataTransfer.setData('text/plain',im.id); }catch(err){} span.classList.add('dragging'); e.stopPropagation(); });
     span.addEventListener('dragend',()=>{ _dragImgId=null; span.classList.remove('dragging'); });
     span.addEventListener('dragover',e=>{ if(_dragImgId&&_dragImgId!==im.id){ e.preventDefault(); span.classList.add('drop-target'); } });
@@ -2108,6 +2119,27 @@ function loadTaskImages(t){
       if(_dragImgId&&_dragImgId!==im.id) reorderTaskImage(t.id,_dragImgId,im.id); });
     thumbFor(im).then(src=>{ if(src && box.contains(span)) img.src=src; });
   });
+}
+/* move an attachment to a DIFFERENT task (repair tool): ⇄ turns into a task picker; cloud doc re-stamped */
+function openMoveImage(spec, btnEl){
+  const [tid,imgId]=spec.split('|'); const src=tasks.find(x=>x.id===tid); if(!src||!btnEl) return;
+  const owners=new Set(src.ownerIds||[]);
+  const cands=tasks.filter(x=>x.id!==tid && !x.imageReport)
+    .sort((a,b)=>{ const ao=(a.ownerIds||[]).some(id=>owners.has(id))?0:1, bo=(b.ownerIds||[]).some(id=>owners.has(id))?0:1; return ao-bo; });
+  const sel=document.createElement('select'); sel.className='img-move-sel';
+  sel.innerHTML='<option value="">Move to… (same-owner tasks first)</option>'+
+    cands.map(x=>`<option value="${esc(x.id)}">${esc(((x.ownerIds||[]).map(memberName).join('/')||'—')+' · '+pptPlabel(x)+' · '+taskTopic(x).slice(0,28))}</option>`).join('');
+  btnEl.replaceWith(sel); sel.focus();
+  sel.addEventListener('change',()=>{ if(sel.value) moveTaskImage(tid,imgId,sel.value); else openTask(tid); });
+  sel.addEventListener('blur',()=>{ if(!sel.value && _openTaskId===tid) openTask(tid); });
+}
+function moveTaskImage(fromTid, imgId, toTid){
+  const a=tasks.find(x=>x.id===fromTid), b=tasks.find(x=>x.id===toTid); if(!a||!b) return;
+  const idx=(a.images||[]).findIndex(i=>i&&i.id===imgId); if(idx<0) return;
+  const [im]=a.images.splice(idx,1); b.images=b.images||[]; b.images.push(im);
+  if(CLOUD.on&&CLOUD.db&&CLOUD.upImgs.has(imgId)) CLOUD.db.collection('images').doc(imgId).set({taskId:toTid},{merge:true}).catch(e=>console.warn('image move failed', e));
+  persist(); renderMembersArea(); if(_openTaskId===fromTid && !$('#taskModal').hidden) openTask(fromTid);
+  toast('Image moved to: '+taskTopic(b).slice(0,30));
 }
 function reorderTaskImage(tid, dragId, targetId){
   const t=tasks.find(x=>x.id===tid); if(!t||!t.images) return;
@@ -3007,6 +3039,7 @@ function wireEvents(){
     if(t.dataset.clearocr){ const tk=tasks.find(x=>x.id===t.dataset.clearocr); if(tk){ delete tk.ocrText; persist(); openTask(tk.id); toast('OCR text discarded'); } return; }
     if(t.dataset.duepick!==undefined){ const dp=$('#taskDuePick'); if(dp){ dp._tid=t.dataset.duepick; try{ dp.showPicker?dp.showPicker():dp.click(); }catch(e){ toast('Type the date as YYYY-MM-DD'); } } return; }
     if(t.dataset.delimg){ const [tid,imgId]=t.dataset.delimg.split('|'); removeTaskImage(tid,imgId); return; }
+    { const mvb=t.closest('[data-moveimg]'); if(mvb){ openMoveImage(mvb.dataset.moveimg, mvb); return; } }
     if(t.dataset.light){ openLight(imageDataById(t.dataset.light)||t.getAttribute('src')); return; }
     if(t.dataset.exportMember!==undefined){ if(t.dataset.exportMember) exportWord([t.dataset.exportMember]); else toast('This task has no matching member'); return; }
     // ----- catalog editing -----
@@ -3191,8 +3224,10 @@ function cloudSave(){
 }
 function cloudSaveImages(){
   if(!CLOUD.on || !CLOUD.db) return;
+  if(!CLOUD.imgsLoaded) return;                         // never upload with incomplete cloud knowledge (was re-stamping images onto wrong tasks)
+  const dead=CLOUD.deadImgs||new Set();
   tasks.forEach(t=>(t.images||[]).forEach(im=>{
-    if(im && im.id && im.data && !CLOUD.upImgs.has(im.id)){
+    if(im && im.id && im.data && !CLOUD.upImgs.has(im.id) && !dead.has(im.id)){
       CLOUD.upImgs.add(im.id);
       CLOUD.db.collection('images').doc(im.id)
         .set({id:im.id, taskId:t.id, data:im.data, w:im.w||0, h:im.h||0, _ts:Date.now()})
@@ -3200,7 +3235,7 @@ function cloudSaveImages(){
     }
   }));
   Object.keys(projMeta).forEach(pk=>((projMeta[pk]&&projMeta[pk].images)||[]).forEach(im=>{   // project images (block diagrams / schedules)
-    if(im && im.id && im.data && !CLOUD.upImgs.has(im.id)){
+    if(im && im.id && im.data && !CLOUD.upImgs.has(im.id) && !dead.has(im.id)){
       CLOUD.upImgs.add(im.id);
       CLOUD.db.collection('images').doc(im.id)
         .set({id:im.id, projk:pk, title:im.title||'', folder:im.folder||'', data:im.data, w:im.w||0, h:im.h||0, _ts:Date.now()})
@@ -3210,6 +3245,7 @@ function cloudSaveImages(){
 }
 function cloudApplyDoc(d){
   if(!d) return;
+  const dead=CLOUD.deadImgs||new Set();
   if(Array.isArray(d.members)) members=d.members;
   if(Array.isArray(d.groups)) memberGroups=d.groups;
   if(d.activeGroup) activeGroup=d.activeGroup;
@@ -3217,9 +3253,9 @@ function cloudApplyDoc(d){
   if(Array.isArray(d.tasks)){
     const imgById={}; tasks.forEach(t=>{ if((t.images||[]).length) imgById[t.id]=t.images; });  // keep local images
     tasks=d.tasks.map(t=>{
-      const m={};                                               // merge local + cloud images by id
-      (imgById[t.id]||[]).forEach(im=>{ if(im&&im.id) m[im.id]=im; });
-      (CLOUD.imgsByTask[t.id]||[]).forEach(im=>{ if(im&&im.id) m[im.id]=im; });
+      const m={};   // cloud placement is AUTHORITATIVE; local copies only count while still pending upload (never resurrect deletions)
+      (imgById[t.id]||[]).forEach(im=>{ if(im&&im.id && !dead.has(im.id) && !CLOUD.upImgs.has(im.id)) m[im.id]=im; });
+      (CLOUD.imgsByTask[t.id]||[]).forEach(im=>{ if(im&&im.id && !dead.has(im.id)) m[im.id]=im; });
       return Object.assign({}, t, {images: Object.values(m)});
     });
   }
@@ -3228,8 +3264,8 @@ function cloudApplyDoc(d){
     const localImg={}; Object.keys(projMeta).forEach(k=>{ if(((projMeta[k]||{}).images||[]).length) localImg[k]=projMeta[k].images; });
     const inc=d.projMeta;
     Object.keys(inc).forEach(k=>{ const m={};
-      (localImg[k]||[]).forEach(im=>{ if(im&&im.id) m[im.id]=im; });
-      (((CLOUD.imgsByProj||{})[k])||[]).forEach(im=>{ if(im&&im.id) m[im.id]=im; });
+      (localImg[k]||[]).forEach(im=>{ if(im&&im.id && !dead.has(im.id) && !CLOUD.upImgs.has(im.id)) m[im.id]=im; });
+      (((CLOUD.imgsByProj||{})[k])||[]).forEach(im=>{ if(im&&im.id && !dead.has(im.id)) m[im.id]=im; });
       if(Object.keys(m).length) inc[k]=Object.assign({}, inc[k], {images:Object.values(m)});
     });
     projMeta=inc;
@@ -3249,7 +3285,9 @@ function cloudLoadImagesInto(snap){
 async function cloudEnter(){                         // load once + subscribe to live updates
   const ref=CLOUD.db.collection('workspace').doc('main');
   // load cloud images first so they attach when the workspace doc is applied
-  try{ cloudLoadImagesInto(await CLOUD.db.collection('images').get()); }catch(e){ console.warn('image load failed', e); }
+  CLOUD.deadImgs=CLOUD.deadImgs||new Set();
+  try{ cloudLoadImagesInto(await CLOUD.db.collection('images').get()); CLOUD.imgsLoaded=true; }
+  catch(e){ console.warn('image load failed', e); }     // imgsLoaded stays false -> cloudSaveImages stays paused (no blind re-stamping)
   let existed=false;
   try{ const snap=await ref.get(); if(snap.exists){ existed=true; CLOUD.applying=true; try{ cloudApplyDoc(snap.data()); } finally { CLOUD.applying=false; } persistLocal(); } }
   catch(e){ console.warn('cloud load failed', e); }
@@ -3268,9 +3306,9 @@ async function cloudEnter(){                         // load once + subscribe to
       const im=ch.doc.data(); if(!im||!im.id) return;
       if(im.projk){                                      // PROJECT image (block diagram / schedule)
         CLOUD.imgsByProj=CLOUD.imgsByProj||{}; const m=projMeta[im.projk];
-        if(ch.type==='removed'){ CLOUD.upImgs.delete(im.id);
+        if(ch.type==='removed'){ (CLOUD.deadImgs=CLOUD.deadImgs||new Set()).add(im.id); CLOUD.upImgs.delete(im.id);
           if(CLOUD.imgsByProj[im.projk]) CLOUD.imgsByProj[im.projk]=CLOUD.imgsByProj[im.projk].filter(x=>x.id!==im.id);
-          if(m&&m.images) m.images=m.images.filter(x=>x.id!==im.id);
+          Object.keys(projMeta).forEach(pk=>{ const mm=projMeta[pk]; if(mm&&mm.images&&mm.images.length) mm.images=mm.images.filter(x=>x.id!==im.id); });
         } else { CLOUD.upImgs.add(im.id); const obj={id:im.id,data:im.data,w:im.w,h:im.h,title:im.title||'',folder:im.folder||''};
           const arr=(CLOUD.imgsByProj[im.projk]=CLOUD.imgsByProj[im.projk]||[]); const ai=arr.findIndex(x=>x.id===im.id); if(ai>=0)arr[ai]=obj; else arr.push(obj);
           if(m){ m.images=m.images||[]; const pi=m.images.findIndex(x=>x.id===im.id); if(pi>=0)m.images[pi]=obj; else m.images.push(obj); }
@@ -3279,9 +3317,10 @@ async function cloudEnter(){                         // load once + subscribe to
       }
       const t=tasks.find(x=>x.id===im.taskId);
       if(ch.type==='removed'){
+        (CLOUD.deadImgs=CLOUD.deadImgs||new Set()).add(im.id);
         CLOUD.upImgs.delete(im.id);
         if(CLOUD.imgsByTask[im.taskId]) CLOUD.imgsByTask[im.taskId]=CLOUD.imgsByTask[im.taskId].filter(x=>x.id!==im.id);
-        if(t&&t.images) t.images=t.images.filter(x=>x.id!==im.id);
+        tasks.forEach(x=>{ if(x.images&&x.images.length) x.images=x.images.filter(i=>i.id!==im.id); });   // purge STALE placements too, not just the doc's taskId
       } else {                                           // added / modified
         CLOUD.upImgs.add(im.id);
         const obj={id:im.id,data:im.data,w:im.w,h:im.h};
