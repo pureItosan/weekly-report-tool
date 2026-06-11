@@ -1848,7 +1848,13 @@ function chartBar(label, pct, valText, cls, opts){
     <span class="pval ${done?'done':''}">${esc(valText)}</span></div>`;
 }
 
+function memberScopeId(){                                  // non-admin members may ONLY ever see their own tasks
+  if(typeof CLOUD==='undefined' || !CLOUD.me || CLOUD.me.admin) return null;
+  const me=members.find(x=>x.name.toLowerCase()===String(CLOUD.me.name||'').toLowerCase());
+  return me ? me.id : '__nomatch__';                       // no roster match -> show nothing (never everything)
+}
 function renderMembersArea(){
+  const lock=memberScopeId(); if(lock) filters.member=lock;   // enforced on EVERY render — refresh/snapshots can't widen the scope
   const {map,unassigned}=buildBuckets();
   const q=filters.q.toLowerCase();
   const matchStatus=t=>{
@@ -2389,6 +2395,7 @@ function assemblePptx(memberIds){
     return order.map(k=>g.get(k));
   }
   function groupStatus(g){
+    if(g.closed) return {text:'Done',color:PPT.green};
     const txt=g.cur.concat(g.next).join(' ').toLowerCase();
     const maxp=g.progs.length?Math.max.apply(null,g.progs):0;
     if(g.high || /\b(blocked|blocker|stuck|crash|overdue)\b/.test(txt))                return {text:'At risk',color:'E5484D'};
@@ -2494,8 +2501,9 @@ function assemblePptx(memberIds){
       ]);
     }
     chunk.forEach((gp,idx)=>{ const st=groupStatus(gp), bg={color: idx%2?'F1F5FB':'FFFFFF'};
+      const lbl=(idx>0 && chunk[idx-1].label===gp.label)?'':gp.label;        // blank repeated project on continuation rows (like merged cells)
       rows.push([
-        {text:gp.label, options:{bold:true,color:PPT.navy,fontSize:TFONT,valign:'top',fill:bg}},
+        {text:lbl, options:{bold:true,color:PPT.navy,fontSize:TFONT,valign:'top',fill:bg}},
         {text:cellRuns(gp[key]), options:{valign:'top',fill:bg}},
         {text:gp.due||'—', options:{color:PPT.gray,fontSize:TFONT,align:'center',valign:'middle',fill:bg}},
         {text:st.text, options:{bold:true,color:st.color,fontSize:TFONT,align:'center',valign:'middle',fill:bg}}
@@ -2509,9 +2517,12 @@ function assemblePptx(memberIds){
   //      same slide (flowing to a new slide only when it runs out of room), then
   //      one-big-image attachment pages.
   function renderMember(name, role, list){
-    const groups=groupAllByProject(list);
-    const thisRows=groups.filter(g=>g.cur.length);
-    const nextRows=groups.filter(g=>g.next.length);
+    // ONE ROW PER TASK — each task keeps its own due date & status (same-project tasks are no longer merged)
+    const perTask=(list||[]).map(t=>({label:pptPlabel(t), cur:splitRptLines(t.current), next:splitRptLines(t.next),
+      progs:(typeof t.progress==='number'?[t.progress]:[]), high:t.risk==='High'&&!isClosed(t),
+      due:String(t.due||'').trim(), closed:isClosed(t)}));
+    const thisRows=perTask.filter(g=>g.cur.length);
+    const nextRows=perTask.filter(g=>g.next.length);
     const imgs=collectImages(list);
     if(!thisRows.length && !nextRows.length && !imgs.length){
       const s=pptx.addSlide(); header(s,name,role,'');
@@ -3351,7 +3362,9 @@ async function cloudInit(){
       CLOUD.authedAs = (user.email===CLOUD.adminEmail) ? 'admin' : 'member';
       await cloudEnter();
       const saved=store.load('wrt_cloud_me',null);
-      if(saved && saved.name){ CLOUD.me={name:saved.name, admin:CLOUD.authedAs==='admin'}; applyRoleUI(); $('#cloudGate').hidden=true; }
+      if(saved && saved.name){ CLOUD.me={name:saved.name, admin:CLOUD.authedAs==='admin'}; applyRoleUI(); $('#cloudGate').hidden=true;
+        if(!CLOUD.me.admin) setView('tasks');              // member resume lands on their own tasks
+        renderAll(); }                                     // re-render under the restored role (scope enforced)
       else showGate('who');
     } else if(!user){
       showGate('pass');
