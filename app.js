@@ -722,7 +722,7 @@ function overlayTasks(parsed, sourceName){
       inc.id=ex.id; inc.status='Updated'; inc.history=ex.history;
       inc.images=(inc.images.length?inc.images:ex.images);
       if(ex.manualOwners){ inc.ownerIds=ex.ownerIds; inc.unmatched=ex.unmatched; inc.shared=ex.shared; inc.manualOwners=true; } // keep manual owners
-      if(ex.manualEdit){ inc.risk=ex.risk; inc.complexity=ex.complexity; inc.progress=ex.progress; inc.nextProgress=ex.nextProgress; inc.manualEdit=true; } // keep manual risk/cx/%
+      if(ex.manualEdit){ inc.risk=ex.risk; inc.complexity=ex.complexity; inc.progress=ex.progress; inc.nextProgress=ex.nextProgress; inc.due=ex.due||inc.due; inc.manualEdit=true; } // keep manual risk/cx/%/due
       if(ex.manualText){ inc.current=ex.current; inc.next=ex.next; inc.analysis=ex.analysis; inc.manualText=true; }              // keep manual text edits
       Object.assign(ex, inc);
       nUpd++; touched.push(ex);
@@ -1730,7 +1730,7 @@ function editTaskField(id, field, val){
     if(g){ t.projk=g.projk; t.projectLabel=g.label; t.project=(projMeta[g.projk]||{}).code||g.label; }   // picked from dropdown
     else { t.project=val; t.projk=projKeyOf(val); t.projectLabel=projLabelOf(val); } }                    // free-text fallback
   else t[field]=val;
-  if(field==='progress'||field==='risk'||field==='complexity'||field==='nextProgress') t.manualEdit=true;  // survive re-import
+  if(field==='progress'||field==='risk'||field==='complexity'||field==='nextProgress'||field==='due') t.manualEdit=true;  // survive re-import
   if(field==='current'||field==='next'||field==='analysis') t.manualText=true;      // keep user edits
   persist(); renderStats(); renderCatalog(); renderMembersArea();
   // don't re-render the modal for free-text edits (would steal focus mid-typing)
@@ -2003,7 +2003,11 @@ function openTask(id){
       <div class="kv">
         <span class="k">Project</span><span><select class="proj-edit" data-edit="project" data-tid="${t.id}">${projectOptionsHTML(t.projk)}</select></span>
         <span class="k">Status</span><span>${esc(statusLine(t))}</span>
-        <span class="k">Due date</span><span>${esc(t.due||'—')}</span>
+        <span class="k">Due date</span><span class="due-wrap">
+          <input class="due-edit" value="${esc(t.due||'')}" placeholder="YYYY-MM-DD or 6/E" data-edit="due" data-tid="${t.id}">
+          <input type="date" class="due-pick" id="taskDuePick" tabindex="-1" aria-hidden="true">
+          <button type="button" class="btn xs due-btn" data-duepick="${t.id}" title="Pick a date">📅</button>
+        </span>
         <span class="k">Owner (raw)</span><span>${esc(t.rawOwner||'—')}</span>
         <span class="k">Reporter</span><span>${esc(t.reporter||'—')}</span>
         <span class="k">Assigned members</span><span class="owners">${ownerChips}<select class="add-owner" data-addowner="${t.id}"><option value="">＋ Add member</option>${memberOptionsByRole(t.ownerIds)}</select></span>
@@ -2934,6 +2938,7 @@ function wireEvents(){
     if(t.dataset.phrase){ const ta=$('#wbThisWeek'); ta.value=(ta.value?ta.value+' ':'')+PHRASES[t.dataset.phrase]; return; }
     if(t.dataset.clearimg){ clearTaskImages(t.dataset.clearimg); return; }
     if(t.dataset.clearocr){ const tk=tasks.find(x=>x.id===t.dataset.clearocr); if(tk){ delete tk.ocrText; persist(); openTask(tk.id); toast('OCR text discarded'); } return; }
+    if(t.dataset.duepick!==undefined){ const dp=$('#taskDuePick'); if(dp){ dp._tid=t.dataset.duepick; try{ dp.showPicker?dp.showPicker():dp.click(); }catch(e){ toast('Type the date as YYYY-MM-DD'); } } return; }
     if(t.dataset.delimg){ const [tid,imgId]=t.dataset.delimg.split('|'); removeTaskImage(tid,imgId); return; }
     if(t.dataset.light){ openLight(imageDataById(t.dataset.light)||t.getAttribute('src')); return; }
     if(t.dataset.exportMember!==undefined){ if(t.dataset.exportMember) exportWord([t.dataset.exportMember]); else toast('This task has no matching member'); return; }
@@ -2978,6 +2983,7 @@ function wireEvents(){
     const el=e.target;
     if(el.id==='catalogMember'){ catalogMember=el.value; renderCatalog(); return; }
     if(el.id==='taskGroupSel'){ taskGroupBy=el.value; store.save('wrt_taskgroup',taskGroupBy); renderMembersArea(); return; }
+    if(el.id==='taskDuePick'){ if(el.value&&el._tid) editTaskField(el._tid,'due',el.value); return; }
     if(el.id==='filterRole'){ filters.role=el.value; renderMembersArea(); return; }
     if(el.dataset.setrole!==undefined){ setMemberRole(el.dataset.setrole, el.value); return; }
     if(el.dataset.setrole2!==undefined){ setMemberRole2(el.dataset.setrole2, el.value); return; }
