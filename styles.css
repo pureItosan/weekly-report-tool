@@ -617,6 +617,13 @@ label.check input{width:auto}
 .topic-edit{width:100%;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:13px}
 .topic-edit::placeholder{color:var(--muted);opacity:.8}
 .h2-sub{font-size:13px;color:var(--muted);font-weight:500;margin-left:8px}
+/* drag-to-reorder: task cards & attachment thumbs */
+.card[draggable]{cursor:grab}
+.card.dragging{opacity:.45;cursor:grabbing}
+.card.drop-target{box-shadow:0 0 0 2px var(--accent),var(--shadow-sm)}
+#taskImgsBox .img-edit[draggable]{cursor:grab}
+#taskImgsBox .img-edit.dragging{opacity:.4}
+#taskImgsBox .img-edit.drop-target img{outline:2px solid var(--accent2);outline-offset:2px}
 /* ===== consistency pass: one kicker style + aligned chips/cards across all views ===== */
 .ptree-type,.pm-type,.ptt-head,.pv-sectitle,.eyebrow{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.7px}
 .ptree-type,.pm-type-name{color:var(--accent)}

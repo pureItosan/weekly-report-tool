@@ -1897,6 +1897,30 @@ function renderMembersArea(){
   $('#membersArea').innerHTML = html ||
     '<div class="panel"><p class="hint">No matching items (or no members added / reports imported yet).</p></div>';
   const fc=$('#filterCount'); if(fc) fc.textContent='Showing '+shown.size+' tasks';
+  wireTaskCardDrag();
+}
+/* drag a task card onto another to reorder — the global order drives Word/PPTX output order */
+let _dragCardId=null;
+function reorderTask(dragId, targetId){
+  const f=tasks.findIndex(x=>x.id===dragId), t0=tasks.findIndex(x=>x.id===targetId);
+  if(f<0||t0<0||dragId===targetId) return;
+  const [mv]=tasks.splice(f,1);
+  const t1=tasks.findIndex(x=>x.id===targetId);
+  tasks.splice(f<t0 ? t1+1 : t1, 0, mv);                 // dragging down -> after target; up -> before
+  persist(); renderMembersArea(); renderCatalog();
+  toast('Order updated — exports follow this order');
+}
+function wireTaskCardDrag(){
+  const area=$('#membersArea'); if(!area) return;
+  area.querySelectorAll('.card[data-task]').forEach(c=>{
+    c.addEventListener('dragstart',e=>{ if(e.target.closest('input,select,textarea,button')){ e.preventDefault(); return; }
+      _dragCardId=c.dataset.task; try{ e.dataTransfer.setData('text/plain',_dragCardId); }catch(err){} c.classList.add('dragging'); });
+    c.addEventListener('dragend',()=>{ _dragCardId=null; c.classList.remove('dragging'); });
+    c.addEventListener('dragover',e=>{ if(_dragCardId&&_dragCardId!==c.dataset.task){ e.preventDefault(); c.classList.add('drop-target'); } });
+    c.addEventListener('dragleave',()=>c.classList.remove('drop-target'));
+    c.addEventListener('drop',e=>{ e.preventDefault(); c.classList.remove('drop-target');
+      if(_dragCardId&&_dragCardId!==c.dataset.task) reorderTask(_dragCardId,c.dataset.task); });
+  });
 }
 function memberBlock(name, list, isUnassigned, mid){
   const avg=list.length?Math.round(list.reduce((s,t)=>s+(+t.progress||0),0)/list.length):0;
@@ -1963,7 +1987,7 @@ function taskCard(t){
   const delta=t.delta?`<div class="delta">⟳ Weekly delta:${esc(t.delta)}</div>`:'';
   const closed=isClosed(t);
   const shortP=t.projectLabel || String(t.project||'').split(/[\n(]/)[0].trim();
-  return `<div class="card ${closed?'closed':''}" data-task="${t.id}">
+  return `<div class="card ${closed?'closed':''}" draggable="true" data-task="${t.id}" title="Drag to reorder — Word/PPTX follow this order">
     <button class="card-del" data-del-task="${t.id}" title="Delete task">🗑</button>
     <div class="ct"><span class="proj">${esc(shortP)}</span></div>
     <div class="tcard-topic">${esc(taskTopic(t))}</div>
@@ -2058,19 +2082,37 @@ async function thumbFor(im){
     const th=c.toDataURL('image/jpeg',.72); _thumbCache[im.id]=th; return th;
   }catch(e){ return im.data; }                           // fallback: full image rather than nothing
 }
+let _dragImgId=null;
 function loadTaskImages(t){
   const box=$('#taskImgsBox'); if(!box) return; const add=box.querySelector('.img-add');
   (t.images||[]).forEach(im=>{
-    thumbFor(im).then(src=>{
-      if(_openTaskId!==t.id || !box.isConnected || !box.contains(add) || !src) return;
-      const span=document.createElement('span'); span.className='img-edit';
-      const img=new Image(); img.decoding='async'; img.setAttribute('data-light', im.id); img.src=src;
-      span.appendChild(img);
-      const del=document.createElement('button'); del.className='img-del';
-      del.setAttribute('data-delimg', t.id+'|'+im.id); del.title='Delete this image'; del.textContent='✕';
-      span.appendChild(del); box.insertBefore(span, add);
-    });
+    // insert the frame SYNCHRONOUSLY in array order (display order === stored order), fill the thumb async
+    const span=document.createElement('span'); span.className='img-edit'; span.draggable=true;
+    span.title='Drag to reorder — exports follow this order';
+    const img=new Image(); img.decoding='async'; img.setAttribute('data-light', im.id);
+    span.appendChild(img);
+    const del=document.createElement('button'); del.className='img-del';
+    del.setAttribute('data-delimg', t.id+'|'+im.id); del.title='Delete this image'; del.textContent='✕';
+    span.appendChild(del); box.insertBefore(span, add);
+    span.addEventListener('dragstart',e=>{ _dragImgId=im.id; try{ e.dataTransfer.setData('text/plain',im.id); }catch(err){} span.classList.add('dragging'); e.stopPropagation(); });
+    span.addEventListener('dragend',()=>{ _dragImgId=null; span.classList.remove('dragging'); });
+    span.addEventListener('dragover',e=>{ if(_dragImgId&&_dragImgId!==im.id){ e.preventDefault(); span.classList.add('drop-target'); } });
+    span.addEventListener('dragleave',()=>span.classList.remove('drop-target'));
+    span.addEventListener('drop',e=>{ e.preventDefault(); e.stopPropagation(); span.classList.remove('drop-target');
+      if(_dragImgId&&_dragImgId!==im.id) reorderTaskImage(t.id,_dragImgId,im.id); });
+    thumbFor(im).then(src=>{ if(src && box.contains(span)) img.src=src; });
   });
+}
+function reorderTaskImage(tid, dragId, targetId){
+  const t=tasks.find(x=>x.id===tid); if(!t||!t.images) return;
+  const f=t.images.findIndex(x=>x.id===dragId), t0=t.images.findIndex(x=>x.id===targetId);
+  if(f<0||t0<0) return;
+  const [mv]=t.images.splice(f,1);
+  const t1=t.images.findIndex(x=>x.id===targetId);
+  t.images.splice(f<t0 ? t1+1 : t1, 0, mv);
+  persist();
+  const box=$('#taskImgsBox'); if(box){ box.querySelectorAll('.img-edit').forEach(s=>s.remove()); loadTaskImages(t); }
+  toast('Image order updated');
 }
 function imageDataById(id){                              // lightbox needs the FULL image for a thumb's id
   for(const t of tasks) for(const im of (t.images||[])) if(im&&im.id===id) return im.data;
