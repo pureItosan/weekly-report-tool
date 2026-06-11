@@ -592,6 +592,7 @@ function makeTaskFromFields(f, slideNo){
   if(!project) project = topicLabel(current) || topicLabel(f.next) || 'Untitled';   // label by topic, not "Untitled Project"
   return {
     project,
+    topic:(f.topic||'').trim()||undefined,
     reporter:(f.reporter||'').trim(),
     rawOwner:(f.owner||f.reporter||'').trim(),
     current: mit ? (current+(current?' ':'')+'Mitigation: '+mit) : current,
@@ -723,6 +724,7 @@ function overlayTasks(parsed, sourceName){
       inc.images=(inc.images.length?inc.images:ex.images);
       if(ex.manualOwners){ inc.ownerIds=ex.ownerIds; inc.unmatched=ex.unmatched; inc.shared=ex.shared; inc.manualOwners=true; } // keep manual owners
       if(ex.manualEdit){ inc.risk=ex.risk; inc.complexity=ex.complexity; inc.progress=ex.progress; inc.nextProgress=ex.nextProgress; inc.due=ex.due||inc.due; inc.manualEdit=true; } // keep manual risk/cx/%/due
+      if(ex.topic && !inc.topic) inc.topic=ex.topic;            // a user-set topic survives re-imports
       if(ex.manualText){ inc.current=ex.current; inc.next=ex.next; inc.analysis=ex.analysis; inc.manualText=true; }              // keep manual text edits
       Object.assign(ex, inc);
       nUpd++; touched.push(ex);
@@ -1607,7 +1609,7 @@ function renderTreeHTML(groups){
     const cp=projCustProj(g);
     if(cp)(tasksByCp[cp]=tasksByCp[cp]||[]).push(...g.tasks); else noCp.push(...g.tasks); });
   const usedCp={}, CAP=6;
-  const taskChip=t=>{ const txt=(t.current||t.next||'(no description)').replace(/\s+/g,' ').trim().slice(0,48);
+  const taskChip=t=>{ const txt=taskTopic(t);
     return `<button class="ptree-task st-${esc(t.status||'')}" draggable="true" data-opentask="${esc(t.id)}" title="Open task · drag onto a model card to move it"><span class="ptt-dot"></span><span class="ptt-txt">${esc(txt)}</span></button>`; };
   const taskBranch=(cp,ts)=>{ if(!ts||!ts.length) return '';
     const exp=treeExpand[cp], list=exp?ts:ts.slice(0,CAP);
@@ -1734,7 +1736,7 @@ function editTaskField(id, field, val){
   if(field==='current'||field==='next'||field==='analysis') t.manualText=true;      // keep user edits
   persist(); renderStats(); renderCatalog(); renderMembersArea();
   // don't re-render the modal for free-text edits (would steal focus mid-typing)
-  if(!$('#taskModal').hidden && _openTaskId===id && !['project','current','next','analysis'].includes(field)) openTask(id);
+  if(!$('#taskModal').hidden && _openTaskId===id && !['project','current','next','analysis','topic'].includes(field)) openTask(id);
 }
 function cloudDeleteImage(imgId){                       // also remove from the cloud images collection
   if(imgId && typeof CLOUD!=='undefined' && CLOUD.on && CLOUD.db){
@@ -1801,7 +1803,7 @@ function renderHighlights(){
   const today=new Date(); today.setHours(0,0,0,0);
   const overdue=vt.filter(t=>{ const d=_sd(t.due); return d && d<today && !isClosed(t); });
   const wip=vt.filter(t=>!isClosed(t) && (+t.progress||0)>0 && (+t.progress||0)<100);
-  const item=t=>`<button class="hl-item" data-opentask="${esc(t.id)}"><span class="hl-proj">${esc(pptPlabel(t))}</span><span class="hl-txt">${esc((t.current||t.next||'(no description)').replace(/\s+/g,' ').trim().slice(0,44))}</span></button>`;
+  const item=t=>`<button class="hl-item" data-opentask="${esc(t.id)}"><span class="hl-proj">${esc(pptPlabel(t))}</span><span class="hl-txt">${esc(taskTopic(t))}</span></button>`;
   const col=(icon,title,arr,cls)=>`<div class="hl-col"><div class="hl-head ${cls}">${icon} ${title} <span class="hl-n">${arr.length}</span></div>${arr.slice(0,6).map(item).join('')||'<div class="hl-empty">None 🎉</div>'}${arr.length>6?`<div class="hl-more">+${arr.length-6} more</div>`:''}</div>`;
   cont.innerHTML=col('⚠️','High risk',high,'warn')+col('⏰','Overdue',overdue,'warn')+col('🔧','In progress',wip,'accent');
 }
@@ -1964,6 +1966,7 @@ function taskCard(t){
   return `<div class="card ${closed?'closed':''}" data-task="${t.id}">
     <button class="card-del" data-del-task="${t.id}" title="Delete task">🗑</button>
     <div class="ct"><span class="proj">${esc(shortP)}</span></div>
+    <div class="tcard-topic">${esc(taskTopic(t))}</div>
     <div class="tags">
       ${closed?'<span class="tag closed">✓ Closed</span>':''}
       <span class="tag risk-${t.risk}">Risk ${esc(t.risk)}</span>
@@ -1985,7 +1988,7 @@ function openTask(id){
   _openTaskId=id;
   const ownerChips=((t.ownerIds||[]).map(id=>`<span class="owner-chip">${memberRoleBadges(id)}${esc(memberName(id))}<button data-rmowner="${t.id}|${id}" title="Remove">×</button></span>`).join(''))||'<span class="owner-chip none">Unassigned</span>';
   $('#taskModalInner').innerHTML=`
-    <div class="modal-head"><h2>${esc(t.projectLabel||t.project)}</h2><button class="icon-btn" data-close>✕</button></div>
+    <div class="modal-head"><h2>${esc(taskTopic(t))} <span class="h2-sub">${esc(pptPlabel(t))}</span></h2><button class="icon-btn" data-close>✕</button></div>
     <div class="modal-body detail">
       <div class="tags">
         ${isClosed(t)?'<span class="tag closed">✓ Closed</span>':''}
@@ -2001,6 +2004,7 @@ function openTask(id){
         <label>Complexity<select data-edit="complexity" data-tid="${t.id}">${optTags(['Low','Medium','High'],t.complexity)}</select></label>
       </div>
       <div class="kv">
+        <span class="k">Topic</span><span><input class="topic-edit" value="${esc(t.topic||'')}" placeholder="${esc(taskTopic(t))} (auto — type to override)" maxlength="60" data-edit="topic" data-tid="${t.id}"></span>
         <span class="k">Project</span><span><select class="proj-edit" data-edit="project" data-tid="${t.id}">${projectOptionsHTML(t.projk)}</select></span>
         <span class="k">Status</span><span>${esc(statusLine(t))}</span>
         <span class="k">Due date</span><span class="due-wrap">
@@ -2138,7 +2142,7 @@ function openWorkbench(preMemberId, preProjk){
   $('#phraseRow').innerHTML=Object.keys(PHRASES).map(k=>`<button data-phrase="${esc(k)}">${esc(k)}</button>`).join('');
   wbImages=[]; renderWbThumbs();
   $('#wbProject').innerHTML=projectOptionsHTML(preProjk||'');       // project dropdown — known projects only; ＋ on a project pre-selects it
-  ['#wbThisWeek','#wbIssue','#wbNext'].forEach(s=>$(s).value='');
+  ['#wbThisWeek','#wbIssue','#wbNext','#wbTopic'].forEach(s=>{ const e=$(s); if(e) e.value=''; });
   { const d=$('#wbDue'), dp=$('#wbDuePick'); if(d) d.value=''; if(dp) dp.value=''; }
   $('#wbProgress').value=0; $('#wbNextProgress').value=0;
   $('#workbenchModal').hidden=false;
@@ -2158,6 +2162,7 @@ function saveWorkbench(){
   const current=$('#wbThisWeek').value.trim();
   const names=ids.map(memberName), name=names.join(', ');
   const p={project, reporter:names[0], rawOwner:name, current,
+    topic:(($('#wbTopic')||{}).value||'').trim(),
     next:$('#wbNext').value.trim(), risk:$('#wbRisk').value, due:$('#wbDue').value,
     complexity:$('#wbComplexity').value, progress:+$('#wbProgress').value||0,
     nextProgress:+$('#wbNextProgress').value||0,
@@ -2247,6 +2252,15 @@ function pptPlabel(t){
   const m=projMeta[resolveProjk(t.projk||t.key)]||{};
   if(m.master && m.code) return (m.custProj && m.custProj!==m.code) ? (m.custProj+' - '+m.code) : m.code;   // e.g. "ID535 - B01W043T00"
   return t.projectLabel||shortProj(t.project);
+}
+// short task title: the user-set topic, otherwise auto-derived from the first sentence of the work text
+// (auto is computed at render time so it follows content updates and never goes stale)
+function taskTopic(t){
+  if(t.topic) return t.topic;
+  let s=String(t.current||t.next||'').trim().split('\n')[0];
+  s=s.replace(/^\s*(?:[-–•*]|\d+[.)])\s*/,'');
+  const m=s.match(/^.{8,60}?(?=\s*[.;:。；]|\s[-–—]\s|$)/);
+  return ((m?m[0]:s).slice(0,60).trim())||'(untitled)';
 }
 function progColor(p){ return p>=100?PPT.green : p>=70?PPT.blue : p>=34?PPT.cyan : PPT.amber; }
 function collectImages(list){

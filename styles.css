@@ -612,6 +612,11 @@ label.check input{width:auto}
 .due-pick{position:absolute;left:0;bottom:0;width:1px;height:1px;opacity:0;pointer-events:none;border:0;padding:0}
 .due-btn{flex:none;padding:6px 10px}
 .due-edit{width:150px;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:13px}
+/* task topic (short title) */
+.tcard-topic{font-weight:700;font-size:14px;color:var(--text);margin:4px 0 2px;line-height:1.35}
+.topic-edit{width:100%;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:13px}
+.topic-edit::placeholder{color:var(--muted);opacity:.8}
+.h2-sub{font-size:13px;color:var(--muted);font-weight:500;margin-left:8px}
 /* ===== consistency pass: one kicker style + aligned chips/cards across all views ===== */
 .ptree-type,.pm-type,.ptt-head,.pv-sectitle,.eyebrow{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.7px}
 .ptree-type,.pm-type-name{color:var(--accent)}
