@@ -2442,9 +2442,10 @@ function assemblePptx(memberIds){
   const TFONT=11, HFONT=12, CPCELL=88;     // bigger, clearer font
   const MAXY=7.0;                          // bottom limit for content before a new slide
   // table cell → bulleted runs, status markers coloured, technical text verbatim
-  function cellRuns(lines){
+  function cellRuns(lines, topic){
     const arr=(lines&&lines.length?lines:['—']).slice(0,10).map(l=>l.length>200?l.slice(0,197)+'…':l);
     const runs=[];
+    if(topic) runs.push({text:topic, options:{color:PPT.navy, bold:true, breakLine:true}});   // task Topic as the lead line — disambiguates similar jobs
     arr.forEach(line=>{ const parts=rptMarkerRuns(line);
       parts.forEach((p,i)=>runs.push({text:(i===0?'• ':'')+p.text, options:{
         color:(p.options&&p.options.color)||PPT.dark, bold:!!(p.options&&p.options.bold),
@@ -2536,7 +2537,7 @@ function assemblePptx(memberIds){
       const lbl=(idx>0 && chunk[idx-1].label===gp.label)?'':gp.label;        // blank repeated project on continuation rows (like merged cells)
       rows.push([
         {text:lbl, options:{bold:true,color:PPT.navy,fontSize:TFONT,valign:'top',fill:bg}},
-        {text:cellRuns(gp[key]), options:{valign:'top',fill:bg}},
+        {text:cellRuns(gp[key], gp.topic), options:{valign:'top',fill:bg}},
         {text:gp.due||'—', options:{color:PPT.gray,fontSize:TFONT,align:'center',valign:'middle',fill:bg}},
         {text:st.text, options:{bold:true,color:st.color,fontSize:TFONT,align:'center',valign:'middle',fill:bg}}
       ]);
@@ -2550,7 +2551,7 @@ function assemblePptx(memberIds){
   //      one-big-image attachment pages.
   function renderMember(name, role, list){
     // ONE ROW PER TASK — each task keeps its own due date & status (same-project tasks are no longer merged)
-    const perTask=(list||[]).map(t=>({label:pptPlabel(t), cur:splitRptLines(t.current), next:splitRptLines(t.next),
+    const perTask=(list||[]).map(t=>({label:pptPlabel(t), topic:(t.topic||'').trim(), cur:splitRptLines(t.current), next:splitRptLines(t.next),
       progs:(typeof t.progress==='number'?[t.progress]:[]), high:t.risk==='High'&&!isClosed(t),
       due:String(t.due||'').trim(), closed:isClosed(t)}));
     const thisRows=perTask.filter(g=>g.cur.length);
@@ -2576,14 +2577,15 @@ function assemblePptx(memberIds){
         y += HEAD_H + 0.40 + GAP;
         return;
       }
+      const rowLines=g=>g.topic? [g.topic].concat(g[key]) : g[key];   // topic adds a line -> count it in the height estimate
       let i=0;
       while(i<rowsG.length){
-        const firstH=estRowH(rowsG[i][key]);
+        const firstH=estRowH(rowLines(rowsG[i]));
         if(!s || y+LBL+HEAD_H+firstH > MAXY) newSlide();     // room for label + header + 1 row
         sectionLabel(s,label,y); y+=LBL; rec();
         const top=y; let used=HEAD_H; const chunk=[];
         while(i<rowsG.length){
-          const h=estRowH(rowsG[i][key]);
+          const h=estRowH(rowLines(rowsG[i]));
           if(chunk.length && top+used+h > MAXY) break;
           chunk.push(rowsG[i]); used+=h; i++;
         }
