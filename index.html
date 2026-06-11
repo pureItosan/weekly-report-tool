@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Weekly Report Hub</title>
-<link rel="stylesheet" href="styles.css?v=260611b">
+<link rel="stylesheet" href="styles.css?v=260611c">
 </head>
 <body>
 <!-- ===== CLOUD LOGIN GATE (online only) ===== -->
@@ -15,7 +15,7 @@
   <div class="cg-box">
     <div class="cg-logo">📋</div>
     <h2>Weekly Report Hub</h2>
-    <div class="cg-ver">build 260611b</div>
+    <div class="cg-ver">build 260611c</div>
     <div id="cgPassWrap">
       <p class="cg-sub">Enter your team passcode to sign in</p>
       <input type="password" id="cgPass" placeholder="Team passcode" autocomplete="current-password">
@@ -38,11 +38,14 @@
     </div>
   </div>
   <div class="top-actions">
-    <button class="btn" id="openWorkbenchBtn">✍ Workbench</button>
+    <button class="btn admin-only" id="openWorkbenchBtn">✍ Workbench</button>
+    <button class="btn member-only" id="myReportBtn" title="Preview your own PPTX pages (check image order)">👁 My report</button>
+    <button class="btn member-only" id="myPptxBtn" title="Download your own PPTX">⬇ My PPTX</button>
+    <button class="btn" id="archiveBtn" title="Weekly final reports — download this or any past week">📚 Weekly reports</button>
   </div>
   <div class="session-info">
     <span class="cloud-info" id="cloudWho"></span>
-    <span class="build-badge" title="Currently loaded app build">b260611b</span>
+    <span class="build-badge" title="Currently loaded app build">b260611c</span>
     <button class="btn sm cloud-info" id="cloudLogout" hidden>Sign out</button>
   </div>
 </header>
@@ -299,6 +302,21 @@
       <button class="btn" data-close>Cancel</button>
       <button class="btn primary" id="projListImportBtn">Import</button>
     </div>
+  </div>
+</div>
+
+<!-- ============ WEEKLY REPORT ARCHIVE ============ -->
+<div class="modal-overlay" id="archiveModal" hidden>
+  <div class="modal wide">
+    <div class="modal-head">
+      <h2>📚 Weekly reports</h2>
+      <div class="head-actions">
+        <select id="archSort"><option value="desc">Modified — newest first</option><option value="asc">Modified — oldest first</option></select>
+        <button class="icon-btn" data-close>✕</button>
+      </div>
+    </div>
+    <div class="modal-body"><div id="archiveList"></div></div>
+    <div class="modal-foot"><span class="hint">The current week updates live with every save; past weeks are frozen at their last edit. Downloads regenerate the deck from that week's snapshot.</span></div>
   </div>
 </div>
 

@@ -592,7 +592,7 @@ function makeTaskFromFields(f, slideNo){
   if(!project) project = topicLabel(current) || topicLabel(f.next) || 'Untitled';   // label by topic, not "Untitled Project"
   return {
     project,
-    topic:(f.topic||'').trim()||undefined,
+    topic:(f.topic||'').trim(),
     reporter:(f.reporter||'').trim(),
     rawOwner:(f.owner||f.reporter||'').trim(),
     current: mit ? (current+(current?' ':'')+'Mitigation: '+mit) : current,
@@ -2328,6 +2328,14 @@ const PPT = {
   white:'FFFFFF', card:'F8FAFC', track:'E6ECF5', line:'D8E0EC',
   green:'10B981', amber:'F59E0B', font:'Arial', fontB:'Arial Black'
 };
+function isoWeek(d){ d=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())); const day=d.getUTCDay()||7;
+  d.setUTCDate(d.getUTCDate()+4-day); const y0=new Date(Date.UTC(d.getUTCFullYear(),0,1));
+  return Math.ceil((((d-y0)/86400000)+1)/7); }
+function reportFileName(memberNm){ const n=new Date();
+  const ww=String(isoWeek(n)).padStart(2,'0');
+  const dd=n.getFullYear()+String(n.getMonth()+1).padStart(2,'0')+String(n.getDate()).padStart(2,'0');
+  const tt=String(n.getHours()).padStart(2,'0')+String(n.getMinutes()).padStart(2,'0');
+  return `SPD RD3 HW Week${ww} Report_${dd}_${tt}${memberNm?('_'+memberNm):''}.pptx`; }
 function pptPlabel(t){
   const m=projMeta[resolveProjk(t.projk||t.key)]||{};
   if(m.master && m.code) return (m.custProj && m.custProj!==m.code) ? (m.custProj+' - '+m.code) : m.code;   // e.g. "ID535 - B01W043T00"
@@ -2399,12 +2407,11 @@ function assemblePptx(memberIds){
   function header(s, name, role, tag){
     s.background={color:PPT.white};
     s.addShape(R,{x:0.7,y:0.34,w:0.14,h:0.14,fill:{color:PPT.cyan}});
-    s.addText(`WEEKLY REPORT  ｜  ${date}`,
-      {x:0.95,y:0.26,w:9,h:0.3,fontSize:11,bold:true,color:PPT.teal,fontFace:PPT.font,charSpacing:2});
+    s.addText(`SPD RD3 HW WEEKLY REPORT  ｜  W${String(isoWeek(new Date())).padStart(2,'0')}  ｜  ${date}`,
+      {x:0.95,y:0.26,w:10.5,h:0.3,fontSize:11,bold:true,color:PPT.teal,fontFace:PPT.font,charSpacing:2});
     s.addText(name,{x:0.7,y:0.6,w:10.6,h:0.64,fontSize:28,bold:true,color:PPT.dark,fontFace:PPT.fontB,valign:'middle'});
     if(tag) s.addText(tag,{x:10.8,y:0.72,w:1.83,h:0.36,fontSize:12,bold:true,color:PPT.gray,fontFace:PPT.font,align:'right',valign:'middle'});
     s.addShape(R,{x:0.7,y:1.4,w:11.93,h:0.022,fill:{color:PPT.line}});
-    s.addText('Weekly Report Hub · '+date,{x:0.7,y:7.06,w:11.93,h:0.3,fontSize:8,color:PPT.gray,fontFace:PPT.font,align:'right'});
   }
   function sectionLabel(s, text, y){
     s.addShape(R,{x:0.7,y:y+0.04,w:0.12,h:0.22,fill:{color:PPT.cyan}});
@@ -2496,7 +2503,7 @@ function assemblePptx(memberIds){
   }
   function attachPages(name, role, imgs){
     if(!imgs||!imgs.length) return;
-    const X0=0.7, Y0=1.98, W=11.93, H=4.95, GAP=0.18, CAPH=0.30;
+    const X0=0.7, Y0=0.78, W=11.93, H=6.25, GAP=0.18, CAPH=0.30;   // compact one-line header -> image area maximised
     const MINW=2.5, MINH=1.45, MAXPP=1;                 // ONE image per slide (dense measurement shots stay readable); ratio is never distorted
     let i=0, page=0;
     while(i<imgs.length){
@@ -2508,8 +2515,10 @@ function assemblePptx(memberIds){
       if(!grid){ take=1; grid={cols:1,rows:1}; }
       const chunk=imgs.slice(i,i+take);
       const cw=(W-(grid.cols-1)*GAP)/grid.cols, ch=(H-(grid.rows-1)*GAP)/grid.rows;
-      const s=pptx.addSlide(); header(s,name,role, page?'Attachments (cont.)':'Attachments');
-      sectionLabel(s,'ATTACHMENTS  ｜  Issue images / measurements',1.55);
+      const s=pptx.addSlide(); s.background={color:PPT.white};   // no big name header — one compact line, image gets the page
+      s.addShape(R,{x:0.7,y:0.34,w:0.14,h:0.14,fill:{color:PPT.cyan}});
+      s.addText(`ATTACHMENTS  ｜  ${name}${page?'  (cont.)':''}`,
+        {x:0.95,y:0.26,w:11,h:0.3,fontSize:11,bold:true,color:PPT.teal,fontFace:PPT.font,charSpacing:2});
       chunk.forEach((im,kk)=>{
         const r=Math.floor(kk/grid.cols), c=kk%grid.cols;
         const inRow=(r===grid.rows-1)?(chunk.length-(grid.rows-1)*grid.cols):grid.cols;
@@ -2628,8 +2637,9 @@ function assemblePptx(memberIds){
   if((!memberIds||!memberIds.length) && unassigned.length)
     renderMember('Unassigned','',unassigned);
 
-  const fname=(memberIds&&memberIds.length===1?memberName(memberIds[0]):'AllMembers')+
-    '_WeeklyReport_'+date+'.pptx';
+  const tot=pptx.slides.length;                          // page x / total on every slide (replaces the repeated footer text)
+  pptx.slides.forEach((s,i)=>s.addText((i+1)+' / '+tot,{x:12.0,y:7.1,w:1.15,h:0.28,fontSize:9,color:PPT.gray,fontFace:PPT.font,align:'right'}));
+  const fname=reportFileName(memberIds&&memberIds.length===1?memberName(memberIds[0]):'');
   return {pptx, fname};
 }
 
@@ -3003,6 +3013,10 @@ function wireEvents(){
   $('#exportPptxBtn').addEventListener('click', ()=>buildPptx(null));
   $('#ocrReportsBtn').addEventListener('click', ocrAllReports);
   $('#previewBtn').addEventListener('click', openNarrative);
+  { const b=$('#archiveBtn'); if(b) b.addEventListener('click', openArchive); }
+  { const s=$('#archSort'); if(s) s.addEventListener('change', renderArchive); }
+  { const b=$('#myReportBtn'); if(b) b.addEventListener('click', openPptxPreview); }
+  { const b=$('#myPptxBtn'); if(b) b.addEventListener('click', ()=>{ const id=memberScopeId(); if(id&&id!=='__nomatch__') buildPptx([id]); else toast('Your name is not in the roster yet'); }); }
   { const b=$('#pptxPreviewBtn'); if(b) b.addEventListener('click', openPptxPreview); }
   { const s=$('#pptxPrevMember'); if(s) s.addEventListener('change', renderPptxPreview); }
   { const e=$('#pptxPrevExportBtn'); if(e) e.addEventListener('click', ()=>{ const mid=$('#pptxPrevMember').value; buildPptx(mid?[mid]:null); }); }
@@ -3042,6 +3056,7 @@ function wireEvents(){
     if(t.dataset.duepick!==undefined){ const dp=$('#taskDuePick'); if(dp){ dp._tid=t.dataset.duepick; try{ dp.showPicker?dp.showPicker():dp.click(); }catch(e){ toast('Type the date as YYYY-MM-DD'); } } return; }
     if(t.dataset.delimg){ const [tid,imgId]=t.dataset.delimg.split('|'); removeTaskImage(tid,imgId); return; }
     { const mvb=t.closest('[data-moveimg]'); if(mvb){ openMoveImage(mvb.dataset.moveimg, mvb); return; } }
+    if(t.dataset.archdl){ downloadArchive(t.dataset.archdl); return; }
     if(t.dataset.light){ openLight(imageDataById(t.dataset.light)||t.getAttribute('src')); return; }
     if(t.dataset.exportMember!==undefined){ if(t.dataset.exportMember) exportWord([t.dataset.exportMember]); else toast('This task has no matching member'); return; }
     // ----- catalog editing -----
@@ -3160,8 +3175,55 @@ function renderNarrative(){
 }
 // PPTX preview: one card per member (the deck's per-member slide content) before exporting
 function openPptxPreview(){
-  const sel=$('#pptxPrevMember'); if(sel) sel.innerHTML='<option value="">All members</option>'+members.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('');
+  const sel=$('#pptxPrevMember'), lock=memberScopeId();
+  if(sel){
+    if(lock && lock!=='__nomatch__'){ sel.innerHTML=`<option value="${esc(lock)}">${esc(memberName(lock))}</option>`; sel.value=lock; sel.disabled=true; }
+    else { sel.disabled=false; sel.innerHTML='<option value="">All members</option>'+members.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join(''); }
+  }
   renderPptxPreview(); $('#pptxPreviewModal').hidden=false;
+}
+/* ---------- weekly report archive (auto-snapshot per ISO week; regenerate on download) ---------- */
+let _archDocs=[];
+function archFileName(d){ const dt=new Date(d.ts||Date.now());
+  const dd=dt.getFullYear()+String(dt.getMonth()+1).padStart(2,'0')+String(dt.getDate()).padStart(2,'0');
+  const tt=String(dt.getHours()).padStart(2,'0')+String(dt.getMinutes()).padStart(2,'0');
+  return `SPD RD3 HW Week${String(d.week).padStart(2,'0')} Report_${dd}_${tt}.pptx`; }
+async function openArchive(){
+  if(!(CLOUD.on&&CLOUD.db)){ toast('Cloud not connected'); return; }
+  $('#archiveModal').hidden=false; $('#archiveList').innerHTML='<p class="hint">Loading…</p>';
+  try{ const snap=await CLOUD.db.collection('weekly').get(); _archDocs=[]; snap.forEach(d=>_archDocs.push(d.data())); renderArchive(); }
+  catch(e){ console.warn(e); $('#archiveList').innerHTML='<p class="hint">Could not load the archive.</p>'; }
+}
+function renderArchive(){
+  const dir=(($('#archSort')||{}).value)||'desc';
+  const n=new Date(), curId=n.getFullYear()+'-W'+String(isoWeek(n)).padStart(2,'0');
+  const rows=_archDocs.slice().sort((a,b)=>dir==='desc'?(b.ts||0)-(a.ts||0):(a.ts||0)-(b.ts||0));
+  $('#archiveList').innerHTML = rows.length? `<div class="arch-table">
+    <div class="arch-row arch-head"><span>Name</span><span>Modified</span><span>Last editor</span><span></span></div>
+    ${rows.map(d=>{ const id=d.year+'-W'+String(d.week).padStart(2,'0'); const cur=id===curId;
+      const ts=new Date(d.ts||0); const tss=ts.getFullYear()+'-'+String(ts.getMonth()+1).padStart(2,'0')+'-'+String(ts.getDate()).padStart(2,'0')+' '+String(ts.getHours()).padStart(2,'0')+':'+String(ts.getMinutes()).padStart(2,'0');
+      return `<div class="arch-row"><span class="arch-name">📊 ${esc(archFileName(d).replace('.pptx',''))}${cur?' <span class="pill cur">current</span>':''}</span>
+        <span class="arch-ts">${esc(tss)}</span><span class="arch-ed">${esc(d.editor||'—')}</span>
+        <span><button class="btn xs primary" data-archdl="${esc(id)}" title="Download this week's report">⬇</button></span></div>`; }).join('')}
+  </div>` : '<p class="hint">No weekly snapshots yet — they are created automatically whenever someone saves.</p>';
+}
+async function downloadArchive(id){
+  const n=new Date(), curId=n.getFullYear()+'-W'+String(isoWeek(n)).padStart(2,'0');
+  if(id===curId){ buildPptx(null); return; }            // current week = live data
+  toast('Building '+id+' …');
+  try{
+    const doc=await CLOUD.db.collection('weekly').doc(id).get(); const d=doc.data();
+    if(!d){ toast('Snapshot not found'); return; }
+    const bak={tasks,members,projMeta,projMerge};
+    try{
+      members=d.members||[]; projMeta=d.projMeta||{}; projMerge=d.projMerge||{};
+      tasks=(d.tasks||[]).map(t=>Object.assign({},t,{images:(((CLOUD.imgsByTask||{})[t.id])||[]).slice()}));   // re-attach surviving image docs by task id
+      const r=assemblePptx(null);
+      if(r){ r.fname=archFileName(d);
+        try{ await r.pptx.writeFile({fileName:r.fname}); }catch(e){ const blob=await r.pptx.write({outputType:'blob'}); downloadBlob(blob,r.fname); }
+        toast('Downloaded '+r.fname); }
+    } finally { tasks=bak.tasks; members=bak.members; projMeta=bak.projMeta; projMerge=bak.projMerge; renderAll(); }
+  }catch(e){ console.warn(e); toast('Archive download failed'); }
 }
 function renderPptxPreview(){
   const mid=$('#pptxPrevMember')?$('#pptxPrevMember').value:'';
@@ -3221,6 +3283,13 @@ function cloudSave(){
       members, groups:memberGroups, activeGroup, tasks:tasksLite, batches,
       projAliases, projMeta:projMetaNoImg(), projMerge, projCats, idCodeMap, deletedNames, _ts:Date.now()
     }).then(()=>{ CLOUD.dirty=false; }).catch(e=>{ CLOUD.dirty=false; console.warn('cloud save failed', e); cloudErrToast(e); });
+    { // weekly snapshot: every save also updates THIS ISO-week's doc; when the week rolls over,
+      // saves go to a new doc and the previous week freezes as that week's final report.
+      const n=new Date(), wk=isoWeek(n), wid=n.getFullYear()+'-W'+String(wk).padStart(2,'0');
+      CLOUD.db.collection('weekly').doc(wid).set({year:n.getFullYear(), week:wk, ts:Date.now(),
+        editor:(CLOUD.me&&CLOUD.me.name)||'', members, tasks:tasksLite, projMeta:projMetaNoImg(), projMerge
+      }).catch(e=>console.warn('weekly snapshot failed', e));
+    }
     cloudSaveImages();                                  // upload any new images to the images collection
   }, 700);
 }
