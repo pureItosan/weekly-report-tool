@@ -903,18 +903,21 @@ function projShares(list){
 }
 /* ---------- Weekly narrative (plain text, used by preview + mirrors Word export) ---------- */
 function memberNarrative(name, list){
-  const lbl=t=>t.projectLabel||shortProj(t.project);
+  const head=(t,i)=>`${i+1}. ${pptPlabel(t)}${t.topic?(' — '+t.topic):''}`;   // Topic as the headline (when set) — items stay distinguishable
   let out='*'+name+'\n';
   const cur=list.filter(t=>t.current), nexts=list.filter(t=>t.next);
   if(!cur.length && !nexts.length) return out+'Pending input — no items reported this week.\n\n';
   const sh=projShares(list);
   out+='This week: [ '+sh.list.map(o=>`${o.label} - ${o.pct}%`).join(' | ')+' ]\n';   // per-member project breakdown (kept)
   cur.forEach((t,i)=>{
-    out+=`${i+1}. ${lbl(t)}: ${rewriteProfessional(t.current)}\n`;
+    if(t.topic){ out+=head(t,i)+'\n   '+rewriteProfessional(t.current)+'\n'; }
+    else out+=`${head(t,i)}: ${rewriteProfessional(t.current)}\n`;
     out+=`   Status: ${statusWord(t)} | risk ${(t.risk||'M')[0]} | Due Date: ${t.due||'TBC'}\n`;
     if(t.shared) out+=`   Shared owner: ${(t.ownerIds||[]).map(memberName).join(', ')}\n`;
   });
-  if(nexts.length){ out+='Next week:\n'; nexts.forEach((t,i)=>{ out+=`${i+1}. ${lbl(t)}: ${rewriteProfessional(t.next)}\n`; }); }
+  if(nexts.length){ out+='Next week:\n'; nexts.forEach((t,i)=>{
+    if(t.topic){ out+=head(t,i)+'\n   '+rewriteProfessional(t.next)+'\n'; }
+    else out+=`${head(t,i)}: ${rewriteProfessional(t.next)}\n`; }); }
   return out+'\n';
 }
 function buildNarrative(memberIds){
@@ -922,7 +925,7 @@ function buildNarrative(memberIds){
   const targets = memberIds&&memberIds.length ? members.filter(m=>memberIds.includes(m.id)) : members.slice();
   let out='Weekly Report — '+new Date().toISOString().slice(0,10)+'\n\n';
   targets.forEach(m=>{ out+=memberNarrative(m.name, map.get(m.id)); });
-  if((!memberIds||!memberIds.length) && unassigned.length) out+=memberNarrative('Unassigned', unassigned);
+  // Unassigned tasks are intentionally NOT exported — assign owners in the app to include them
   return out;
 }
 
@@ -2293,12 +2296,13 @@ function shortProj(p){ return String(p||'').split(/[(\n]/)[0].trim().slice(0,40)
 function memberReportXml(name, list, mediaCollector){
   let body=P('*'+name,{bold:true,size:14,color:'1F6FEB'});
   if(!list.length){ body+=P('Pending input — no items reported this week.',{color:'B5790F'}); body+=P('',{}); return body; }
-  const plabel=t=>t.projectLabel||shortProj(t.project);
+  const headLn=(t,i)=>`${i+1}. ${pptPlabel(t)}${t.topic?(' — '+t.topic):''}`;   // Topic as the headline (when set)
   const cur=list.filter(t=>t.current);
   const sh=projShares(list);
   body+=P('This week: [ '+sh.list.map(o=>`${o.label} - ${o.pct}%`).join(' | ')+' ]',{bold:true});   // per-member project breakdown (kept)
   cur.forEach((t,i)=>{
-    body+=P(`${i+1}. ${plabel(t)}: ${rewriteProfessional(t.current)}`,{indent:200});
+    if(t.topic){ body+=P(headLn(t,i),{indent:200,bold:true}); body+=P(rewriteProfessional(t.current),{indent:540}); }
+    else body+=P(`${headLn(t,i)}: ${rewriteProfessional(t.current)}`,{indent:200});
     body+=P(`Status: ${statusWord(t)} | risk ${(t.risk||'M')[0]} | Due Date: ${t.due||'TBC'}`,{indent:540,color:'444C5C'});
     // lean: only surface analysis when there is a real risk/blocker
     if(t.risk==='High' || /block|defect|timeout|fail|overdue|debug/i.test(t.current||''))
@@ -2310,7 +2314,9 @@ function memberReportXml(name, list, mediaCollector){
   const nexts=list.filter(t=>t.next);
   if(nexts.length){
     body+=P('Next week:',{bold:true});
-    nexts.forEach((t,i)=>{ body+=P(`${i+1}. ${plabel(t)}: ${rewriteProfessional(t.next)}`,{indent:200}); });
+    nexts.forEach((t,i)=>{
+      if(t.topic){ body+=P(headLn(t,i),{indent:200,bold:true}); body+=P(rewriteProfessional(t.next),{indent:540}); }
+      else body+=P(`${headLn(t,i)}: ${rewriteProfessional(t.next)}`,{indent:200}); });
   }
   body+=P('',{});
   return body;
@@ -2634,8 +2640,7 @@ function assemblePptx(memberIds){
   }
   matrixSlides();
   targets.forEach(m=>renderMember(memberDisplay(m),[m.role,m.role2].filter(Boolean).join(' · '),map.get(m.id)||[]));
-  if((!memberIds||!memberIds.length) && unassigned.length)
-    renderMember('Unassigned','',unassigned);
+  // Unassigned tasks are not exported to the deck
 
   const tot=pptx.slides.length;                          // page x / total on every slide (replaces the repeated footer text)
   pptx.slides.forEach((s,i)=>s.addText((i+1)+' / '+tot,{x:12.0,y:7.1,w:1.15,h:0.28,fontSize:9,color:PPT.gray,fontFace:PPT.font,align:'right'}));
@@ -2670,8 +2675,7 @@ async function exportWord(memberIds){
 
   let bodyXml='';
   targets.forEach(m=>{ bodyXml+=memberReportXml(memberDisplay(m), map.get(m.id), collect); });
-  if((!memberIds||!memberIds.length) && unassigned.length)
-    bodyXml+=memberReportXml('Unassigned', unassigned, collect);
+  // Unassigned tasks are not exported to Word
 
   const documentXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
@@ -3244,7 +3248,7 @@ function pptxPreviewHTML(memberIds){
     return `<div class="pv-slide"><div class="pv-head"><span class="pv-name">${esc(name)}</span>${role?`<span class="pv-role">${esc(role)}</span>`:''}<span class="pv-meta">${(list||[]).length} task${(list||[]).length===1?'':'s'}${totalImgs?` · 📎 ${totalImgs}`:''}</span></div>${sec('THIS WEEK','cur')||'<div class="pv-empty">No this-week work</div>'}${sec('NEXT WEEK','next')}</div>`;
   };
   let html=targets.map(m=>slide(memberDisplay(m),[m.role,m.role2].filter(Boolean).join(' · '),map.get(m.id)||[])).join('');
-  if((!memberIds||!memberIds.length)&&unassigned.length) html+=slide('Unassigned','',unassigned);
+  // Unassigned tasks are not part of the deck preview
   return html||'<p class="hint">No members / tasks yet.</p>';
 }
 
