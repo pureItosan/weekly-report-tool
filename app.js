@@ -883,15 +883,15 @@ function statusLine(t){
 }
 function progClass(v){ return v>=100?'p-done':v>=70?'p-high':v>=34?'p-mid':'p-low'; }
 function statusWord(t){
-  if(t.wstatus) return t.wstatus;
+  if(t.wstatus) return t.wstatus==='On hold'?'Pending':t.wstatus;   // 'On hold' merged into 'Pending' (legacy values normalised)
   if(isClosed(t)) return 'Closed';
   const x=((t.current||'')+' '+(t.next||'')).toLowerCase();
   if(/block|stuck|\bhold\b|fail/.test(x)) return 'Blocked';
   if(/pending|waiting|await|vendor/.test(x)) return 'Pending';
   return 'In-progress';
 }
-const WSTATUS=['In-progress','Pending','Done','At risk','On hold'];   // manual work-status options
-function workStatus(t){ if(t.wstatus) return t.wstatus;
+const WSTATUS=['In-progress','Pending','Done','At risk'];   // manual work-status options ('On hold' merged into 'Pending')
+function workStatus(t){ if(t.wstatus) return t.wstatus==='On hold'?'Pending':t.wstatus;
   const w=statusWord(t); return w==='Closed'?'Done' : w==='Blocked'?'At risk' : w; }
 
 // project "progress" = that project's share of the member's total tasks (sums to 100%).
@@ -1913,12 +1913,11 @@ function renderMembersArea(){
       const by={}; filt.forEach(t=>{ const k=pptPlabel(t)||'—'; (by[k]=by[k]||[]).push(t); });
       groups=Object.keys(by).sort().map(k=>[k,by[k]]);
     } else {                                                    // status board: by work status (manual or auto)
-      const b={'⚠️ At risk':[], '⏸ Pending':[], '🛑 On hold':[], '🔧 In-progress':[], '✅ Done':[]};
+      const b={'⚠️ At risk':[], '⏸ Pending':[], '🔧 In-progress':[], '✅ Done':[]};
       filt.forEach(t=>{ const w=workStatus(t);
         if(w==='Done') b['✅ Done'].push(t);
         else if(w==='At risk') b['⚠️ At risk'].push(t);
         else if(w==='Pending') b['⏸ Pending'].push(t);
-        else if(w==='On hold') b['🛑 On hold'].push(t);
         else b['🔧 In-progress'].push(t); });
       groups=Object.keys(b).filter(k=>b[k].length).map(k=>[k,b[k]]);
     }
@@ -2601,7 +2600,7 @@ function assemblePptx(memberIds){
   //      one-big-image attachment pages.
   function renderMember(name, role, list){
     // ONE ROW PER TASK — each task keeps its own due date & status (same-project tasks are no longer merged)
-    const perTask=(list||[]).map(t=>({label:pptPlabel(t), topic:(t.topic||'').trim(), w:(t.wstatus||''), cur:splitRptLines(t.current), next:splitRptLines(t.next),
+    const perTask=(list||[]).map(t=>({label:pptPlabel(t), topic:(t.topic||'').trim(), w:(t.wstatus==='On hold'?'Pending':(t.wstatus||'')), cur:splitRptLines(t.current), next:splitRptLines(t.next),
       progs:(typeof t.progress==='number'?[t.progress]:[]), high:t.risk==='High'&&!isClosed(t),
       due:String(t.due||'').trim(), closed:isClosed(t)}));
     const thisRows=perTask.filter(g=>g.cur.length);

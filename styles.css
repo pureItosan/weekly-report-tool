@@ -643,7 +643,6 @@ body.role-member .member-only{display:inline-flex!important}
 .tag.ws-in-progress{background:#0d3a40;color:#3cc9dd}
 .tag.ws-pending{background:#3a2c10;color:#ffb454}
 .tag.ws-at-risk{background:#3a1518;color:#ff7b81}
-.tag.ws-on-hold{background:#262d3a;color:#9aabc6}
 .tag.ws-done{background:#10331f;color:#52d18a}
 /* completed-tasks archive rows */
 .done-row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:9px 10px;border-bottom:1px solid var(--line-soft)}
