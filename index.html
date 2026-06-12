@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Weekly Report Hub</title>
-<link rel="stylesheet" href="styles.css?v=260611e">
+<link rel="stylesheet" href="styles.css?v=260611f">
 </head>
 <body>
 <!-- ===== CLOUD LOGIN GATE (online only) ===== -->
@@ -15,7 +15,7 @@
   <div class="cg-box">
     <div class="cg-logo">📋</div>
     <h2>Weekly Report Hub</h2>
-    <div class="cg-ver">build 260611e</div>
+    <div class="cg-ver">build 260611f</div>
     <div id="cgPassWrap">
       <p class="cg-sub">Enter your team passcode to sign in</p>
       <input type="password" id="cgPass" placeholder="Team passcode" autocomplete="current-password">
@@ -45,7 +45,7 @@
   </div>
   <div class="session-info">
     <span class="cloud-info" id="cloudWho"></span>
-    <span class="build-badge" title="Currently loaded app build">b260611e</span>
+    <span class="build-badge" title="Currently loaded app build">b260611f</span>
     <button class="btn sm cloud-info" id="cloudLogout" hidden>Sign out</button>
   </div>
 </header>
@@ -142,6 +142,7 @@
     </select>
     <label class="check"><input type="checkbox" id="hideEmptyChk"> Only members with tasks</label>
     <button class="btn sm" id="clearFiltersBtn">Clear filters</button>
+    <button class="btn sm" id="doneArchBtn" title="Completed tasks archived after their reporting week">🗄 Completed <span class="ct-n" id="doneArchN">0</span></button>
     <span id="filterCount" class="hint"></span>
   </section>
 
@@ -302,6 +303,15 @@
       <button class="btn" data-close>Cancel</button>
       <button class="btn primary" id="projListImportBtn">Import</button>
     </div>
+  </div>
+</div>
+
+<!-- ============ COMPLETED TASKS ARCHIVE ============ -->
+<div class="modal-overlay" id="completedModal" hidden>
+  <div class="modal wide">
+    <div class="modal-head"><h2>🗄 Completed tasks</h2><button class="icon-btn" data-close>✕</button></div>
+    <div class="modal-body"><div id="completedList"></div></div>
+    <div class="modal-foot"><span class="hint">Done tasks are archived automatically when a new week starts (they were reported in that week's final deck). Restore brings one back to the active workspace.</span></div>
   </div>
 </div>
 

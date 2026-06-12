@@ -756,7 +756,7 @@ function scoreTask(t){
 function headTokens(t){ return (taskCore(t).match(/[a-z0-9]{3,}/g)||[]).slice(0,6); }   // first 6 significant words
 function dedupeTasks(){
   const groups={};
-  tasks.forEach(t=>{ if(t.imageReport) return; const k=(t.ownerIds||[]).slice().sort().join('+')||'__un'; (groups[k]=groups[k]||[]).push(t); });
+  tasks.forEach(t=>{ if(t.imageReport||t.archived) return; const k=(t.ownerIds||[]).slice().sort().join('+')||'__un'; (groups[k]=groups[k]||[]).push(t); });
   const remove=new Set();
   Object.values(groups).forEach(arr=>{
     for(let i=0;i<arr.length;i++){
@@ -941,7 +941,20 @@ function buildNarrative(memberIds){
    ===================================================================== */
 function memberName(id){ const m=members.find(x=>x.id===id); return m?m.name:'?'; }
 
-function visibleTasks(){ return tasks.filter(t=>!t.imageReport); }   // hide un-OCR'd image placeholders
+function visibleTasks(){ return tasks.filter(t=>!t.imageReport && !t.archived); }   // archived (completed) tasks leave the workspace, reports and counts entirely
+function weekId(d){ d=d||new Date(); return d.getFullYear()+'-W'+String(isoWeek(d)).padStart(2,'0'); }
+let archWeek=store.load('wrt_archweek','');
+// week rollover: tasks that were Done get archived — they were already reported in last week's frozen snapshot
+function autoArchiveDone(){
+  const cur=weekId();
+  if(archWeek===cur) return 0;
+  let n=0;
+  tasks.forEach(t=>{ if(!t.archived && !t.imageReport && isClosed(t)){ t.archived=true; t.archWeek=archWeek||cur; t.archAt=Date.now(); n++; } });
+  archWeek=cur; store.save('wrt_archweek',archWeek);
+  persist();
+  if(n) toast(n+' completed task(s) moved to 🗄 Completed (already reported last week)');
+  return n;
+}
 function buildBuckets(){
   // member id -> tasks[], plus Unassigned
   const map=new Map(); members.forEach(m=>map.set(m.id,[]));
@@ -973,6 +986,7 @@ function renderFilters(){
   const fs=$('#filterStatus'); if(fs) fs.value=filters.status;
   const fr=$('#filterRole'); if(fr) fr.value=filters.role;
   const tg=$('#taskGroupSel'); if(tg) tg.value=taskGroupBy;
+  const dn=$('#doneArchN'); if(dn) dn.textContent=tasks.filter(t=>t.archived).length;
 }
 
 function roleOptions(sel){ return '<option value="">—</option>'+ROLES.map(r=>`<option ${sel===r?'selected':''}>${r}</option>`).join(''); }
@@ -2094,6 +2108,8 @@ function openTask(id){
     </div>
     <div class="modal-foot">
       <button class="btn danger" data-del-task="${t.id}">Delete task</button>
+      ${isClosed(t)&&!t.archived?`<button class="btn" data-archtask="${t.id}" title="Move to 🗄 Completed (leaves workspace & future reports)">🗄 Archive now</button>`:''}
+      ${t.archived?`<button class="btn" data-unarch="${t.id}">↩ Restore to active</button>`:''}
       ${(t.images&&t.images.length)?`<button class="btn" data-ocr="${t.id}">🔍 OCR image text</button>`:''}
       <button class="btn primary" data-export-member="${(t.ownerIds||[])[0]||''}">Export this member to Word</button>
       <button class="btn" data-close>Close</button>
@@ -3037,6 +3053,7 @@ function wireEvents(){
   $('#ocrReportsBtn').addEventListener('click', ocrAllReports);
   $('#previewBtn').addEventListener('click', openNarrative);
   { const b=$('#archiveBtn'); if(b) b.addEventListener('click', openArchive); }
+  { const b=$('#doneArchBtn'); if(b) b.addEventListener('click', openCompleted); }
   { const s=$('#archSort'); if(s) s.addEventListener('change', renderArchive); }
   { const b=$('#myReportBtn'); if(b) b.addEventListener('click', openPptxPreview); }
   { const b=$('#myPptxBtn'); if(b) b.addEventListener('click', ()=>{ const id=memberScopeId(); if(id&&id!=='__nomatch__') buildPptx([id]); else toast('Your name is not in the roster yet'); }); }
@@ -3080,6 +3097,10 @@ function wireEvents(){
     if(t.dataset.delimg){ const [tid,imgId]=t.dataset.delimg.split('|'); removeTaskImage(tid,imgId); return; }
     { const mvb=t.closest('[data-moveimg]'); if(mvb){ openMoveImage(mvb.dataset.moveimg, mvb); return; } }
     if(t.dataset.archdl){ downloadArchive(t.dataset.archdl); return; }
+    if(t.dataset.archtask){ const tk=tasks.find(x=>x.id===t.dataset.archtask); if(tk){ tk.archived=true; tk.archWeek=weekId(); tk.archAt=Date.now(); persist(); renderAll(); $('#taskModal').hidden=true; toast('Archived to 🗄 Completed'); } return; }
+    if(t.dataset.unarch){ const tk=tasks.find(x=>x.id===t.dataset.unarch); if(tk){ tk.archived=false; persist(); renderAll();
+      if(!$('#completedModal').hidden) renderCompleted();
+      if(_openTaskId===tk.id && !$('#taskModal').hidden) openTask(tk.id); toast('Restored to active'); } return; }
     if(t.dataset.light){ openLight(imageDataById(t.dataset.light)||t.getAttribute('src')); return; }
     if(t.dataset.exportMember!==undefined){ if(t.dataset.exportMember) exportWord([t.dataset.exportMember]); else toast('This task has no matching member'); return; }
     // ----- catalog editing -----
@@ -3205,6 +3226,21 @@ function openPptxPreview(){
   }
   renderPptxPreview(); $('#pptxPreviewModal').hidden=false;
 }
+/* ---------- completed-tasks archive: Done items leave the workspace after their reporting week ---------- */
+function openCompleted(){ renderCompleted(); $('#completedModal').hidden=false; }
+function renderCompleted(){
+  let list=tasks.filter(t=>t.archived);
+  const lock=memberScopeId();
+  if(lock) list = (lock==='__nomatch__') ? [] : list.filter(t=>(t.ownerIds||[]).includes(lock));
+  const by={}; list.forEach(t=>{ const w=t.archWeek||'—'; (by[w]=by[w]||[]).push(t); });
+  const weeks=Object.keys(by).sort().reverse();
+  $('#completedList').innerHTML = weeks.length ? weeks.map(w=>`
+    <div class="ptree-type" style="margin:12px 0 6px">${esc(w)} · ${by[w].length} task${by[w].length>1?'s':''}</div>
+    ${by[w].map(t=>`<div class="done-row">
+      <span class="done-main" data-opentask="${esc(t.id)}" title="Open this task"><b>${esc(taskTopic(t))}</b><span class="done-sub">${esc(pptPlabel(t))} · ${esc((t.ownerIds||[]).map(memberName).join('/')||'—')}</span></span>
+      <button class="btn xs" data-unarch="${esc(t.id)}">↩ Restore</button>
+    </div>`).join('')}`).join('') : '<p class="hint">Nothing archived yet — Done tasks move here automatically when a new week starts.</p>';
+}
 /* ---------- weekly report archive (auto-snapshot per ISO week; regenerate on download) ---------- */
 let _archDocs=[];
 function archFileName(d){ const dt=new Date(d.ts||Date.now());
@@ -3304,7 +3340,7 @@ function cloudSave(){
     const tasksLite=tasks.map(t=>{ const c=Object.assign({},t); delete c.images; c._imgN=(t.images||[]).length; return c; });
     CLOUD.db.collection('workspace').doc('main').set({
       members, groups:memberGroups, activeGroup, tasks:tasksLite, batches,
-      projAliases, projMeta:projMetaNoImg(), projMerge, projCats, idCodeMap, deletedNames, _ts:Date.now()
+      projAliases, projMeta:projMetaNoImg(), projMerge, projCats, idCodeMap, deletedNames, archWeek, _ts:Date.now()
     }).then(()=>{ CLOUD.dirty=false; }).catch(e=>{ CLOUD.dirty=false; console.warn('cloud save failed', e); cloudErrToast(e); });
     { // weekly snapshot: every save also updates THIS ISO-week's doc; when the week rolls over,
       // saves go to a new doc and the previous week freezes as that week's final report.
@@ -3368,6 +3404,7 @@ function cloudApplyDoc(d){
   if(Array.isArray(d.projCats)) projCats=d.projCats;
   if(d.idCodeMap) idCodeMap=d.idCodeMap;
   if(Array.isArray(d.deletedNames)) deletedNames=d.deletedNames;
+  if(d.archWeek){ archWeek=d.archWeek; store.save('wrt_archweek',archWeek); }   // shared rollover marker (prevents a stale client re-archiving mid-week)
 }
 function cloudLoadImagesInto(snap){
   CLOUD.imgsByTask={}; CLOUD.imgsByProj={};
@@ -3385,6 +3422,7 @@ async function cloudEnter(){                         // load once + subscribe to
   let existed=false;
   try{ const snap=await ref.get(); if(snap.exists){ existed=true; CLOUD.applying=true; try{ cloudApplyDoc(snap.data()); } finally { CLOUD.applying=false; } persistLocal(); } }
   catch(e){ console.warn('cloud load failed', e); }
+  if(existed) autoArchiveDone();                       // week rollover check (runs AFTER the shared archWeek marker is applied)
   ref.onSnapshot(snap=>{
     // ignore our own writes; and never overwrite unsaved local edits (dirty) — that was reverting imports/deletes
     if(!snap.exists || snap.metadata.hasPendingWrites || CLOUD.dirty) return;
@@ -3466,7 +3504,7 @@ function showGate(step){
 }
 async function cloudInit(){
   CLOUD.on = (location.protocol!=='file:') && typeof firebase!=='undefined' && !!window.FIREBASE_CONFIG;
-  if(!CLOUD.on) return;                               // local mode — app already booted normally
+  if(!CLOUD.on){ autoArchiveDone(); return; }         // local mode — app already booted normally; still run the week-rollover check
   try{ firebase.initializeApp(window.FIREBASE_CONFIG); CLOUD.db=firebase.firestore(); }
   catch(e){ console.warn('firebase init failed', e); CLOUD.on=false; return; }
 
