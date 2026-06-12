@@ -637,6 +637,14 @@ body.role-member .member-only{display:inline-flex!important}
 .arch-name{font-weight:600;color:var(--text)}
 .pill.cur{background:rgba(110,231,183,.14);color:var(--accent2);border-radius:20px;padding:1px 8px;font-size:11px;margin-left:6px}
 .arch-ts,.arch-ed{color:var(--muted);font-size:12px}
+/* sequence badges (export order) + work-status chips */
+.seq-badge{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:20px;padding:0 6px;margin-right:8px;background:rgba(90,162,255,.14);color:var(--accent);border:1px solid rgba(90,162,255,.35);border-radius:7px;font-size:12px;font-weight:800;font-variant-numeric:tabular-nums}
+.img-seq{position:absolute;left:-6px;top:-6px;background:var(--panel);color:var(--accent);border:1px solid var(--accent);border-radius:7px;padding:0 5px;font-size:11px;font-weight:800;line-height:16px;z-index:1}
+.tag.ws-in-progress{background:#0d3a40;color:#3cc9dd}
+.tag.ws-pending{background:#3a2c10;color:#ffb454}
+.tag.ws-at-risk{background:#3a1518;color:#ff7b81}
+.tag.ws-on-hold{background:#262d3a;color:#9aabc6}
+.tag.ws-done{background:#10331f;color:#52d18a}
 /* ===== consistency pass: one kicker style + aligned chips/cards across all views ===== */
 .ptree-type,.pm-type,.ptt-head,.pv-sectitle,.eyebrow{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.7px}
 .ptree-type,.pm-type-name{color:var(--accent)}

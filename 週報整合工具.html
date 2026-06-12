@@ -647,6 +647,14 @@ body.role-member .member-only{display:inline-flex!important}
 .arch-name{font-weight:600;color:var(--text)}
 .pill.cur{background:rgba(110,231,183,.14);color:var(--accent2);border-radius:20px;padding:1px 8px;font-size:11px;margin-left:6px}
 .arch-ts,.arch-ed{color:var(--muted);font-size:12px}
+/* sequence badges (export order) + work-status chips */
+.seq-badge{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:20px;padding:0 6px;margin-right:8px;background:rgba(90,162,255,.14);color:var(--accent);border:1px solid rgba(90,162,255,.35);border-radius:7px;font-size:12px;font-weight:800;font-variant-numeric:tabular-nums}
+.img-seq{position:absolute;left:-6px;top:-6px;background:var(--panel);color:var(--accent);border:1px solid var(--accent);border-radius:7px;padding:0 5px;font-size:11px;font-weight:800;line-height:16px;z-index:1}
+.tag.ws-in-progress{background:#0d3a40;color:#3cc9dd}
+.tag.ws-pending{background:#3a2c10;color:#ffb454}
+.tag.ws-at-risk{background:#3a1518;color:#ff7b81}
+.tag.ws-on-hold{background:#262d3a;color:#9aabc6}
+.tag.ws-done{background:#10331f;color:#52d18a}
 /* ===== consistency pass: one kicker style + aligned chips/cards across all views ===== */
 .ptree-type,.pm-type,.ptt-head,.pv-sectitle,.eyebrow{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.7px}
 .ptree-type,.pm-type-name{color:var(--accent)}
@@ -729,7 +737,7 @@ select.proj-edit{width:100%;min-width:210px}
   <div class="cg-box">
     <div class="cg-logo">📋</div>
     <h2>Weekly Report Hub</h2>
-    <div class="cg-ver">build 260611d</div>
+    <div class="cg-ver">build 260611e</div>
     <div id="cgPassWrap">
       <p class="cg-sub">Enter your team passcode to sign in</p>
       <input type="password" id="cgPass" placeholder="Team passcode" autocomplete="current-password">
@@ -759,7 +767,7 @@ select.proj-edit{width:100%;min-width:210px}
   </div>
   <div class="session-info">
     <span class="cloud-info" id="cloudWho"></span>
-    <span class="build-badge" title="Currently loaded app build">b260611d</span>
+    <span class="build-badge" title="Currently loaded app build">b260611e</span>
     <button class="btn sm cloud-info" id="cloudLogout" hidden>Sign out</button>
   </div>
 </header>
@@ -1830,6 +1838,7 @@ function overlayTasks(parsed, sourceName){
       if(ex.manualOwners){ inc.ownerIds=ex.ownerIds; inc.unmatched=ex.unmatched; inc.shared=ex.shared; inc.manualOwners=true; } // keep manual owners
       if(ex.manualEdit){ inc.risk=ex.risk; inc.complexity=ex.complexity; inc.progress=ex.progress; inc.nextProgress=ex.nextProgress; inc.due=ex.due||inc.due; inc.manualEdit=true; } // keep manual risk/cx/%/due
       if(ex.topic && !inc.topic) inc.topic=ex.topic;            // a user-set topic survives re-imports
+      if(ex.wstatus && !inc.wstatus) inc.wstatus=ex.wstatus;    // a user-set status survives re-imports
       if(ex.manualText){ inc.current=ex.current; inc.next=ex.next; inc.analysis=ex.analysis; inc.manualText=true; }              // keep manual text edits
       Object.assign(ex, inc);
       nUpd++; touched.push(ex);
@@ -1975,9 +1984,11 @@ function generateAnalysis(t){
   if(bits.length<=1) bits.unshift('Work is progressing as planned with no major blockers reported.');
   return bits.join(' ');
 }
-function isClosed(t){ return (+t.progress||0)>=100; }   // coerce: progress may arrive as a string ("100")
+function isClosed(t){ if(t.wstatus) return t.wstatus==='Done';   // a manually-set status is authoritative
+  return (+t.progress||0)>=100; }   // coerce: progress may arrive as a string ("100")
 function statusLine(t){
   const p=t.progress;
+  if(t.wstatus) return `${t.wstatus} (${p||0}%)`;
   if(p>=100) return 'Closed (100%)';
   if(p<=10) return 'Not started / blocked';
   if(t.risk==='High') return `In progress (${p}%) — at risk`;
@@ -1985,12 +1996,16 @@ function statusLine(t){
 }
 function progClass(v){ return v>=100?'p-done':v>=70?'p-high':v>=34?'p-mid':'p-low'; }
 function statusWord(t){
+  if(t.wstatus) return t.wstatus;
   if(isClosed(t)) return 'Closed';
   const x=((t.current||'')+' '+(t.next||'')).toLowerCase();
   if(/block|stuck|\bhold\b|fail/.test(x)) return 'Blocked';
   if(/pending|waiting|await|vendor/.test(x)) return 'Pending';
   return 'In-progress';
 }
+const WSTATUS=['In-progress','Pending','Done','At risk','On hold'];   // manual work-status options
+function workStatus(t){ if(t.wstatus) return t.wstatus;
+  const w=statusWord(t); return w==='Closed'?'Done' : w==='Blocked'?'At risk' : w; }
 
 // project "progress" = that project's share of the member's total tasks (sums to 100%).
 // groups by RESOLVED project key so merged projects (e.g. B01W046 == B01W046/ID506) count as one.
@@ -2846,7 +2861,7 @@ function editTaskField(id, field, val){
     if(g){ t.projk=g.projk; t.projectLabel=g.label; t.project=(projMeta[g.projk]||{}).code||g.label; }   // picked from dropdown
     else { t.project=val; t.projk=projKeyOf(val); t.projectLabel=projLabelOf(val); } }                    // free-text fallback
   else t[field]=val;
-  if(field==='progress'||field==='risk'||field==='complexity'||field==='nextProgress'||field==='due') t.manualEdit=true;  // survive re-import
+  if(field==='progress'||field==='risk'||field==='complexity'||field==='nextProgress'||field==='due'||field==='wstatus') t.manualEdit=true;  // survive re-import
   if(field==='current'||field==='next'||field==='analysis') t.manualText=true;      // keep user edits
   persist(); renderStats(); renderCatalog(); renderMembersArea();
   // don't re-render the modal for free-text edits (would steal focus mid-typing)
@@ -2996,9 +3011,14 @@ function renderMembersArea(){
     if(taskGroupBy==='project'){
       const by={}; filt.forEach(t=>{ const k=pptPlabel(t)||'—'; (by[k]=by[k]||[]).push(t); });
       groups=Object.keys(by).sort().map(k=>[k,by[k]]);
-    } else {                                                    // status board: High risk / In progress / Closed
-      const b={'⚠️ High risk':[], '🔧 In progress':[], '✅ Closed':[]};
-      filt.forEach(t=>{ if(isClosed(t)) b['✅ Closed'].push(t); else if(t.risk==='High') b['⚠️ High risk'].push(t); else b['🔧 In progress'].push(t); });
+    } else {                                                    // status board: by work status (manual or auto)
+      const b={'⚠️ At risk':[], '⏸ Pending':[], '🛑 On hold':[], '🔧 In-progress':[], '✅ Done':[]};
+      filt.forEach(t=>{ const w=workStatus(t);
+        if(w==='Done') b['✅ Done'].push(t);
+        else if(w==='At risk') b['⚠️ At risk'].push(t);
+        else if(w==='Pending') b['⏸ Pending'].push(t);
+        else if(w==='On hold') b['🛑 On hold'].push(t);
+        else b['🔧 In-progress'].push(t); });
       groups=Object.keys(b).filter(k=>b[k].length).map(k=>[k,b[k]]);
     }
     html=groups.map(([title,ts])=>groupBlock(title,ts)).join('');
@@ -3055,7 +3075,7 @@ function memberBlock(name, list, isUnassigned, mid){
     <span class="meta">${list.length} tasks · avg ${avg}%</span>
     ${list.length?'':'<span class="pending">Pending input</span>'}
     ${mid?`<button class="btn sm add-task-btn" data-addtask="${mid}">＋ Add task</button>`:''}</div>${strip}`;
-  const cards=list.length? `<div class="task-grid">${list.map(taskCard).join('')}</div>` : '';
+  const cards=list.length? `<div class="task-grid">${list.map((t,i)=>taskCard(t,i+1)).join('')}</div>` : '';   // #N = export order
   return `<div class="member-block" id="mblock-${mid||'unassigned'}">${head}${cards}</div>`;
 }
 // generic group block (used when Tasks are grouped by Project or Status instead of Member)
@@ -3103,18 +3123,19 @@ function weekRows(t){
   if(!hasCur && !hasNext){ h+=`<div class="wk-row"><span class="wk-desc">(no description)</span></div>`+progBar(t.progress,closed); }
   return h;
 }
-function taskCard(t){
+function taskCard(t, seq){
   const sharedTag=t.shared?`<span class="tag shared">Shared owner</span>`:'';
   const thumbs=(t.images&&t.images.length)?`<div class="img-badge" title="${t.images.length} image(s) (see top of member)">📎 ${t.images.length}</div>`:'';
   const delta=t.delta?`<div class="delta">⟳ Weekly delta:${esc(t.delta)}</div>`:'';
   const closed=isClosed(t);
+  const ws=workStatus(t), wsCls=ws.toLowerCase().replace(/[^a-z]+/g,'-');
   const shortP=t.projectLabel || String(t.project||'').split(/[\n(]/)[0].trim();
   return `<div class="card ${closed?'closed':''}" draggable="true" data-task="${t.id}" title="Drag to reorder — Word/PPTX follow this order">
     <button class="card-del" data-del-task="${t.id}" title="Delete task">🗑</button>
-    <div class="ct"><span class="proj">${esc(shortP)}</span></div>
+    <div class="ct">${seq?`<span class="seq-badge" title="Export order — drag cards to change">#${seq}</span>`:''}<span class="proj">${esc(shortP)}</span></div>
     <div class="tcard-topic">${esc(taskTopic(t))}</div>
     <div class="tags">
-      ${closed?'<span class="tag closed">✓ Closed</span>':''}
+      ${closed?'<span class="tag closed">✓ Done</span>':`<span class="tag ws-${wsCls}">${esc(ws)}</span>`}
       <span class="tag risk-${t.risk}">Risk ${esc(t.risk)}</span>
       <span class="tag cx">Cx ${esc(t.complexity)}</span>
       ${sharedTag}
@@ -3148,6 +3169,10 @@ function openTask(id){
         <label>Next week %<input type="number" min="0" max="100" value="${t.nextProgress!=null?t.nextProgress:''}" data-edit="nextProgress" data-tid="${t.id}" class="prog-in" placeholder="—"></label>
         <label>Risk<select data-edit="risk" data-tid="${t.id}">${optTags(['Low','Medium','High'],t.risk)}</select></label>
         <label>Complexity<select data-edit="complexity" data-tid="${t.id}">${optTags(['Low','Medium','High'],t.complexity)}</select></label>
+        <label>Status<select data-edit="wstatus" data-tid="${t.id}">
+          <option value="" ${!t.wstatus?'selected':''}>Auto</option>
+          ${WSTATUS.map(s=>`<option ${t.wstatus===s?'selected':''}>${s}</option>`).join('')}
+        </select></label>
       </div>
       <div class="kv">
         <span class="k">Topic</span><span><input class="topic-edit" value="${esc(t.topic||'')}" placeholder="${esc(taskTopic(t))} (auto — type to override)" maxlength="60" data-edit="topic" data-tid="${t.id}"></span>
@@ -3207,10 +3232,11 @@ async function thumbFor(im){
 let _dragImgId=null;
 function loadTaskImages(t){
   const box=$('#taskImgsBox'); if(!box) return; const add=box.querySelector('.img-add');
-  (t.images||[]).forEach(im=>{
+  (t.images||[]).forEach((im,ix)=>{
     // insert the frame SYNCHRONOUSLY in array order (display order === stored order), fill the thumb async
     const span=document.createElement('span'); span.className='img-edit'; span.draggable=true;
     span.title='Drag to reorder — exports follow this order';
+    const sq=document.createElement('span'); sq.className='img-seq'; sq.textContent='#'+(ix+1); span.appendChild(sq);   // matches "Fig N" in the deck
     const img=new Image(); img.decoding='async'; img.setAttribute('data-light', im.id);
     span.appendChild(img);
     const del=document.createElement('button'); del.className='img-del';
@@ -3545,6 +3571,7 @@ function assemblePptx(memberIds){
     return order.map(k=>g.get(k));
   }
   function groupStatus(g){
+    if(g.w) return {text:g.w, color:({'Done':PPT.green,'Pending':PPT.amber,'At risk':'E5484D','On hold':PPT.gray,'In-progress':PPT.teal})[g.w]||PPT.teal};   // manual status wins
     if(g.closed) return {text:'Done',color:PPT.green};
     const txt=g.cur.concat(g.next).join(' ').toLowerCase();
     const maxp=g.progs.length?Math.max.apply(null,g.progs):0;
@@ -3671,7 +3698,7 @@ function assemblePptx(memberIds){
   //      one-big-image attachment pages.
   function renderMember(name, role, list){
     // ONE ROW PER TASK — each task keeps its own due date & status (same-project tasks are no longer merged)
-    const perTask=(list||[]).map(t=>({label:pptPlabel(t), topic:(t.topic||'').trim(), cur:splitRptLines(t.current), next:splitRptLines(t.next),
+    const perTask=(list||[]).map(t=>({label:pptPlabel(t), topic:(t.topic||'').trim(), w:(t.wstatus||''), cur:splitRptLines(t.current), next:splitRptLines(t.next),
       progs:(typeof t.progress==='number'?[t.progress]:[]), high:t.risk==='High'&&!isClosed(t),
       due:String(t.due||'').trim(), closed:isClosed(t)}));
     const thisRows=perTask.filter(g=>g.cur.length);
